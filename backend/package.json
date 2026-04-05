@@ -1,0 +1,31 @@
+{
+  "name": "bgmi-backend",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1024.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-oauth2-jwt-bearer": "^1.7.4",
+    "express-rate-limit": "^6.8.0",
+    "helmet": "^7.0.0",
+    "mongoose": "^7.5.0",
+    "multer": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.13",
+    "@types/express": "^4.17.19",
+    "@types/express-rate-limit": "^6.0.2",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^20.14.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.6.0"
+  }
+}
