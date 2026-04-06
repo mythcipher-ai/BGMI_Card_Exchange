@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { getMe } from "../controllers/authController";
+import { getMe, syncProfile } from "../controllers/authController";
 
 export const authRouter = Router();
 
 authRouter.get("/", getMe);
+authRouter.post("/sync", syncProfile);

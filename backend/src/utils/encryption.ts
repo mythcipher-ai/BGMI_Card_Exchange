@@ -5,10 +5,17 @@ const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
 function getKey(): Buffer {
   const raw = config.encryptionKey;
+  // Exact 64-char hex string = 32 bytes
   if (/^[0-9a-fA-F]{64}$/.test(raw)) {
     return Buffer.from(raw, "hex");
   }
-  return Buffer.from(raw, "base64");
+  // Base64 that decodes to exactly 32 bytes
+  const b64 = Buffer.from(raw, "base64");
+  if (b64.length === 32) {
+    return b64;
+  }
+  // Fallback: derive a 32-byte key via SHA-256 hash
+  return crypto.createHash("sha256").update(raw).digest();
 }
 
 const key = getKey();

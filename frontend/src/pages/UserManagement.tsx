@@ -24,6 +24,18 @@ interface UserDetail {
   sharedIpUsers: any[];
 }
 
+/** Extract a readable display name from user data */
+function getDisplayName(u: { name?: string; email?: string; auth0Id?: string }): string {
+  if (u.name) return u.name;
+  if (u.email) return u.email.split("@")[0];
+  return "User";
+}
+
+function getInitial(u: { name?: string; email?: string; auth0Id?: string }): string {
+  const display = getDisplayName(u);
+  return display[0]?.toUpperCase() || "?";
+}
+
 const UserManagement = () => {
   const { user: me, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -157,20 +169,23 @@ const UserManagement = () => {
                 onClick={() => openDetail(u._id)}
                 className="w-full flex items-center gap-3 rounded-md border border-border bg-card p-3 hover:border-primary/30 transition-colors text-left"
               >
-                <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center font-heading text-xs font-semibold text-primary shrink-0">
-                  {(u.email || u.auth0Id)?.[0]?.toUpperCase() || "?"}
+                <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center font-heading text-xs font-semibold text-primary shrink-0 overflow-hidden">
+                  {u.picture ? (
+                    <img src={u.picture} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    getInitial(u)
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-foreground truncate">{u.email || u.auth0Id.slice(0, 20)}</span>
+                    <span className="text-sm text-foreground truncate">{getDisplayName(u)}</span>
                     {u.role === "admin" && (
                       <Shield size={10} className="text-primary shrink-0" />
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <span>Claims: {u.totalClaims}</span>
-                    <span>Trust: {u.trustScore}</span>
-                    <span>Reports: {u.reportsCount}</span>
+                    <span>Listed: {u.listingsCount}</span>
+                    <span>Claimed: {u.claimedCount}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -213,11 +228,14 @@ const UserManagement = () => {
 
                   {/* User info */}
                   <div className="rounded-md bg-secondary p-3 space-y-1 text-sm">
-                    <p className="text-foreground font-medium">{selectedUser.user.email || selectedUser.user.auth0Id}</p>
+                    <p className="text-foreground font-medium">{getDisplayName(selectedUser.user)}</p>
+                    {selectedUser.user.email && (
+                      <p className="text-xs text-muted-foreground">{selectedUser.user.email}</p>
+                    )}
                     <div className="flex gap-3 text-xs text-muted-foreground">
-                      <span>Role: {selectedUser.user.role}</span>
                       <span>Status: <span className={selectedUser.user.status === "blocked" ? "text-destructive" : "text-primary"}>{selectedUser.user.status}</span></span>
-                      <span>Trust: {selectedUser.user.trustScore}</span>
+                      <span>Listed: {selectedUser.listings.length}</span>
+                      <span>Claimed: {selectedUser.listings.filter((l: any) => l.status === "claimed").length}</span>
                     </div>
                   </div>
 
@@ -241,7 +259,7 @@ const UserManagement = () => {
                       </h3>
                       {selectedUser.sharedIpUsers.map((su: any) => (
                         <div key={su._id} className="flex items-center justify-between rounded-md border border-destructive/20 bg-destructive/5 p-2 text-xs">
-                          <span className="text-foreground">{su.email || su.auth0Id.slice(0, 20)}</span>
+                          <span className="text-foreground">{getDisplayName(su)}</span>
                           <span className="text-muted-foreground font-mono">{su.sharedIps.join(", ")}</span>
                         </div>
                       ))}

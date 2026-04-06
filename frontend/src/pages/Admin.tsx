@@ -9,7 +9,7 @@ import {
   adminUploadImage,
   type DefinedCard
 } from "@/lib/api";
-import { Trash2, Plus, Loader2, Upload, X, CheckCircle } from "lucide-react";
+import { Trash2, Plus, Loader2, Upload, X, CheckCircle, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -17,15 +17,19 @@ const Admin = () => {
   const { user: me, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const [cards, setCards] = useState<DefinedCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
-  // Form state
-  const [type, setType] = useState("");
+  // Category (type) state
+  const [selectedType, setSelectedType] = useState("");
+  const [newType, setNewType] = useState("");
+  const [showNewType, setShowNewType] = useState(false);
+
+  // Card form state
   const [name, setName] = useState("");
-  const [totalCount, setTotalCount] = useState(10);
 
   // Image upload state
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -51,6 +55,19 @@ const Admin = () => {
     }
     loadCards();
   }, [authLoading, me]);
+
+  // Derive unique types from existing cards
+  const existingTypes = [...new Set(cards.map((c) => c.type))].sort();
+
+  // Active type is either selected existing or new
+  const activeType = showNewType ? newType.trim() : selectedType;
+
+  // Auto-select first type if none selected
+  useEffect(() => {
+    if (!selectedType && existingTypes.length > 0 && !showNewType) {
+      setSelectedType(existingTypes[0]);
+    }
+  }, [existingTypes.length]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,7 +95,7 @@ const Admin = () => {
     try {
       const { url } = await adminUploadImage(imageFile);
       setUploadedUrl(url);
-      toast.success("Image uploaded to S3");
+      toast.success("Image uploaded");
     } catch (err: any) {
       toast.error(err.message || "Upload failed");
     } finally {
@@ -93,10 +110,14 @@ const Admin = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!type || !name) {
-      toast.error("Fill type and name");
+  const handleCreate = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!activeType) {
+      toast.error("Select or create a category first");
+      return;
+    }
+    if (!name.trim()) {
+      toast.error("Enter a card name");
       return;
     }
     if (!uploadedUrl) {
@@ -105,13 +126,21 @@ const Admin = () => {
     }
     setCreating(true);
     try {
-      await adminCreateCard({ type, name, imageUrl: uploadedUrl, totalCount });
-      toast.success(`Card "${name}" created`);
-      setType("");
+      await adminCreateCard({ type: activeType, name: name.trim(), imageUrl: uploadedUrl });
+      toast.success(`Card "${name.trim()}" added to ${activeType}`);
       setName("");
-      setTotalCount(10);
       clearImage();
+
+      // If we created with a new type, switch to selecting it
+      if (showNewType) {
+        setSelectedType(activeType);
+        setShowNewType(false);
+        setNewType("");
+      }
+
       loadCards();
+      // Focus back on name input for quick next add
+      setTimeout(() => nameInputRef.current?.focus(), 100);
     } catch (err: any) {
       toast.error(err.message || "Failed to create card");
     } finally {
@@ -147,128 +176,164 @@ const Admin = () => {
           </span>
         </div>
 
-        {/* Create card form */}
-        <form onSubmit={handleCreate} className="rounded-lg border border-border bg-card p-4 space-y-4">
+        {/* Category selector */}
+        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
           <h2 className="font-heading text-sm font-semibold text-foreground flex items-center gap-2">
             <Plus size={14} className="text-primary" />
-            Define New Card
+            Add Cards
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Card Type</label>
-              <input
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                placeholder="e.g. Domain Expansion"
-                className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Card Name</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Gojo Satoru"
-                className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Total Count</label>
-              <input
-                type="number"
-                min={1}
-                value={totalCount}
-                onChange={(e) => setTotalCount(Number(e.target.value))}
-                className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-          </div>
-
-          {/* Image Upload */}
+          {/* Step 1: Pick category */}
           <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">Card Image</label>
-
-            {!imageFile ? (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full rounded-md border-2 border-dashed border-border bg-secondary/50 py-8 flex flex-col items-center gap-2 hover:border-primary/40 transition-colors"
-              >
-                <Upload size={20} className="text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Click to select image (max 5MB)</span>
-              </button>
+            <label className="text-xs text-muted-foreground">Category (Card Type)</label>
+            {!showNewType ? (
+              <div className="flex gap-2 flex-wrap">
+                {existingTypes.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setSelectedType(t)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      selectedType === t
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowNewType(true)}
+                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-secondary text-primary hover:bg-primary/10 transition-colors border border-dashed border-primary/30 flex items-center gap-1"
+                >
+                  <Plus size={10} /> New Category
+                </button>
+              </div>
             ) : (
-              <div className="rounded-md border border-border bg-secondary p-3 space-y-3">
-                {/* Preview */}
-                <div className="flex items-start gap-3">
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="w-20 h-14 rounded object-cover bg-background"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-foreground truncate">{imageFile.name}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {(imageFile.size / 1024).toFixed(0)} KB
-                    </p>
-                    {uploadedUrl && (
-                      <p className="text-[10px] text-primary flex items-center gap-1 mt-1">
-                        <CheckCircle size={10} /> Uploaded to S3
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={clearImage}
-                    className="p-1 text-muted-foreground hover:text-destructive"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-
-                {/* Upload button */}
-                {!uploadedUrl && (
-                  <button
-                    type="button"
-                    onClick={handleUpload}
-                    disabled={uploading}
-                    className="w-full rounded-md bg-accent py-2 text-xs font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {uploading ? (
-                      <>
-                        <Loader2 size={12} className="animate-spin" />
-                        Uploading to S3...
-                      </>
-                    ) : (
-                      <>
-                        <Upload size={12} />
-                        Upload to S3
-                      </>
-                    )}
-                  </button>
-                )}
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  value={newType}
+                  onChange={(e) => setNewType(e.target.value)}
+                  placeholder="e.g. Domain Expansion"
+                  className="flex-1 rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setShowNewType(false); setNewType(""); }}
+                  className="rounded-md px-3 py-2 text-xs text-muted-foreground hover:text-foreground bg-secondary"
+                >
+                  Cancel
+                </button>
               </div>
             )}
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
           </div>
 
-          <button
-            type="submit"
-            disabled={creating || !uploadedUrl}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            {creating && <Loader2 size={14} className="animate-spin" />}
-            Create Card
-          </button>
-        </form>
+          {/* Step 2: Add card under selected category */}
+          {activeType && (
+            <form onSubmit={handleCreate} className="space-y-3 pt-2 border-t border-border">
+              <p className="text-xs text-muted-foreground">
+                Adding cards to <span className="text-primary font-semibold">{activeType}</span>
+              </p>
+
+              <div className="flex gap-3">
+                <div className="flex-1 space-y-1">
+                  <label className="text-xs text-muted-foreground">Card Name</label>
+                  <input
+                    ref={nameInputRef}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Gojo Satoru"
+                    className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              {/* Image Upload */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Card Image</label>
+
+                {!imageFile ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full rounded-md border-2 border-dashed border-border bg-secondary/50 py-6 flex flex-col items-center gap-2 hover:border-primary/40 transition-colors"
+                  >
+                    <Upload size={18} className="text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Click to select image (max 5MB)</span>
+                  </button>
+                ) : (
+                  <div className="rounded-md border border-border bg-secondary p-3 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="w-16 h-12 rounded object-cover bg-background"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-foreground truncate">{imageFile.name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {(imageFile.size / 1024).toFixed(0)} KB
+                        </p>
+                        {uploadedUrl && (
+                          <p className="text-[10px] text-primary flex items-center gap-1 mt-1">
+                            <CheckCircle size={10} /> Uploaded
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={clearImage}
+                        className="p-1 text-muted-foreground hover:text-destructive"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    {!uploadedUrl && (
+                      <button
+                        type="button"
+                        onClick={handleUpload}
+                        disabled={uploading}
+                        className="w-full rounded-md bg-accent py-2 text-xs font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {uploading ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={12} />
+                            Upload Image
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={creating || !uploadedUrl || !name.trim()}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {creating && <Loader2 size={14} className="animate-spin" />}
+                Add Card
+              </button>
+            </form>
+          )}
+        </div>
 
         {/* Existing cards by type */}
         {loading ? (
@@ -277,7 +342,7 @@ const Admin = () => {
           </div>
         ) : Object.keys(grouped).length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            No cards defined yet. Create your first card above.
+            No cards defined yet. Create your first category and card above.
           </div>
         ) : (
           Object.entries(grouped).map(([typeName, typeCards]) => (
@@ -301,7 +366,6 @@ const Admin = () => {
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{card.name}</p>
-                      <p className="text-[10px] text-muted-foreground">Count: {card.totalCount}</p>
                     </div>
                     <button
                       onClick={() => handleDelete(card._id, card.name)}

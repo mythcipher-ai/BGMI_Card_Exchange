@@ -6,6 +6,8 @@ export type UserStatus = "active" | "blocked";
 export interface IUser extends Document {
   auth0Id: string;
   email?: string;
+  name?: string;
+  picture?: string;
   role: UserRole;
   status: UserStatus;
   trustScore: number;
@@ -21,6 +23,8 @@ export interface IUser extends Document {
 const userSchema = new Schema<IUser>({
   auth0Id: { type: String, required: true, unique: true },
   email: { type: String },
+  name: { type: String },
+  picture: { type: String },
   role: { type: String, enum: ["user", "admin"], default: "user" },
   status: { type: String, enum: ["active", "blocked"], default: "active" },
   trustScore: { type: Number, default: 0 },

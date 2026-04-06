@@ -28,11 +28,11 @@ const Footer = () => {
           <div className="text-center sm:text-right space-y-2">
             <p className="text-xs text-muted-foreground">
               Built by{" "}
-              <span className="text-foreground font-medium">Furqan_26</span>
+              <span className="text-foreground font-medium">Furqan Ansari</span>
             </p>
             <div className="flex items-center justify-center sm:justify-end gap-3">
               <a
-                href="https://instagram.com/furqan_26"
+                href="https://www.instagram.com/furqan_.26/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-1.5 rounded-md text-muted-foreground hover:text-pink-400 hover:bg-pink-400/10 transition-colors"
@@ -41,7 +41,7 @@ const Footer = () => {
                 <InstaIcon />
               </a>
               <a
-                href="https://linkedin.com/in/furqan26"
+                href="https://www.linkedin.com/in/furqanansari/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-1.5 rounded-md text-muted-foreground hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
@@ -50,7 +50,7 @@ const Footer = () => {
                 <LinkedInIcon />
               </a>
               <a
-                href="https://furqan26.dev"
+                href="http://frontendgenie.netlify.app"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"

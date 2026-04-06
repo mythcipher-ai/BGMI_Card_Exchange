@@ -6,7 +6,6 @@ export interface CardData {
   offeringCard: string;
   offeringCardImage: string;
   offeringCardType: string;
-  offeringCount: number;
   wantedCards: string[];
   wantedCardImages: { name: string; imageUrl: string; type: string }[];
   trustScore: number;
@@ -54,26 +53,20 @@ const CardItem = ({ card, onClaim }: CardItemProps) => {
             {card.offeringCardType || "Card"}
           </span>
         </div>
-        <div className="absolute top-2 right-2">
-          <TrustBadge score={card.trustScore} />
-        </div>
+      
       </div>
 
       {/* Card Info */}
       <div className="p-3 space-y-2">
         <h3 className="font-heading text-sm font-semibold text-foreground leading-tight truncate">
           {card.offeringCard}
-          {card.offeringCount > 1 && (
-            <span className="text-primary ml-1">x{card.offeringCount}</span>
-          )}
         </h3>
 
         <div className="flex items-center gap-2 text-xs">
-          <span className="text-primary font-medium">Has</span>
+          <span className="text-primary font-medium">User</span>
           <ArrowRightLeft size={10} className="text-muted-foreground" />
           <span className="text-accent font-medium truncate">
-            Wants {card.wantedCards.slice(0, 2).join(", ")}
-            {card.wantedCards.length > 2 && ` +${card.wantedCards.length - 2}`}
+            Wants {card.wantedCards[0]}
           </span>
         </div>
 

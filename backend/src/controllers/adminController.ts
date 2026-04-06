@@ -18,10 +18,10 @@ export async function uploadImage(req: Request, res: Response, next: NextFunctio
 
 export async function createDefinedCard(req: Request, res: Response, next: NextFunction) {
   try {
-    const { type, name, imageKey, imageUrl, totalCount } = req.body;
+    const { type, name, imageKey, imageUrl } = req.body;
 
-    if (!type || !name || !totalCount || (!imageKey && !imageUrl)) {
-      return res.status(400).json({ message: "type, name, image, and totalCount are required" });
+    if (!type || !name || (!imageKey && !imageUrl)) {
+      return res.status(400).json({ message: "type, name, and image are required" });
     }
 
     const existing = await DefinedCard.findOne({ name });
@@ -31,7 +31,7 @@ export async function createDefinedCard(req: Request, res: Response, next: NextF
 
     const finalUrl = imageUrl || getS3ImageUrl(imageKey);
 
-    const card = await DefinedCard.create({ type, name, imageUrl: finalUrl, totalCount });
+    const card = await DefinedCard.create({ type, name, imageUrl: finalUrl });
     res.status(201).json(card);
   } catch (error) {
     next(error);

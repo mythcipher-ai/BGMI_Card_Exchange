@@ -33,7 +33,6 @@ export interface Listing {
   offeringCard: string;
   offeringCardImage: string;
   offeringCardType: string;
-  offeringCount: number;
   wantedCards: string[];
   wantedCardImages: WantedCardInfo[];
   status: string;
@@ -62,8 +61,26 @@ export function fetchPublicListings(params?: { search?: string; sort?: string; p
 }
 
 // Authenticated endpoints
-export function createListing(body: { offeringCardId: string; offeringCount: number; wantedCardIds: string[]; code: string; expiresInHours?: number }) {
+export function createListing(body: { offeringCardId: string; offeringCount?: number; wantedCardIds: string[]; code: string; expiresInHours?: number }) {
   return request<any>("/api/listings", { method: "POST", body: JSON.stringify(body) });
+}
+
+export interface MyListing {
+  id: string;
+  offeringCard: string;
+  offeringCardImage: string;
+  offeringCardType: string;
+  wantedCards: string[];
+  status: string;
+  createdAt: string;
+  expiresAt: string;
+  claimCount: number;
+  claimedBy: { name: string; email?: string } | null;
+  claimedAt: string | null;
+}
+
+export function fetchMyListings() {
+  return request<{ data: MyListing[] }>("/api/listings/mine");
 }
 
 export function deleteListing(id: string) {
@@ -79,7 +96,11 @@ export function reportListing(listingId: string, reason?: string) {
 }
 
 export function fetchMe() {
-  return request<{ id: string; role: string; status: string; auth0Id: string; email?: string; trustScore: number; totalClaims: number; successfulClaims: number; reportsCount: number; dailyClaims: number }>("/api/me");
+  return request<{ id: string; role: string; status: string; auth0Id: string; email?: string; name?: string; picture?: string; trustScore: number; totalClaims: number; successfulClaims: number; reportsCount: number; dailyClaims: number }>("/api/me");
+}
+
+export function syncProfile(body: { name?: string; picture?: string }) {
+  return request<{ ok: boolean }>("/api/me/sync", { method: "POST", body: JSON.stringify(body) });
 }
 
 // Admin endpoints
@@ -100,7 +121,7 @@ export async function adminUploadImage(file: File): Promise<{ key: string; url: 
   return res.json();
 }
 
-export function adminCreateCard(body: { type: string; name: string; imageUrl: string; totalCount: number }) {
+export function adminCreateCard(body: { type: string; name: string; imageUrl: string }) {
   return request<DefinedCard>("/api/admin/cards", { method: "POST", body: JSON.stringify(body) });
 }
 
@@ -117,11 +138,12 @@ export interface AdminUser {
   _id: string;
   auth0Id: string;
   email?: string;
+  name?: string;
+  picture?: string;
   role: string;
   status: string;
-  trustScore: number;
-  totalClaims: number;
-  reportsCount: number;
+  listingsCount: number;
+  claimedCount: number;
   createdAt: string;
   flagged: boolean;
   sharedIps: string[];

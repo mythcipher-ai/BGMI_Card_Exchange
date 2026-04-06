@@ -1,15 +1,20 @@
 import { Request, Response, NextFunction } from "express";
 import { CardListing } from "../models/CardListing";
+import { Claim } from "../models/Claim";
 import { DefinedCard } from "../models/DefinedCard";
 import { encryptText, maskCode } from "../utils/encryption";
 
 export async function createListing(req: Request, res: Response, next: NextFunction) {
   try {
     const user = req.user;
-    const { offeringCardId, offeringCount, wantedCardIds, code, expiresInHours } = req.body;
+    const { offeringCardId, wantedCardIds, code, expiresInHours } = req.body;
 
-    if (!offeringCardId || !offeringCount || !Array.isArray(wantedCardIds) || wantedCardIds.length === 0 || wantedCardIds.length > 3 || !code) {
+    if (!offeringCardId || !Array.isArray(wantedCardIds) || wantedCardIds.length === 0 || wantedCardIds.length > 3 || !code) {
       return res.status(400).json({ message: "Invalid listing payload" });
+    }
+
+    if (!/^\d+$/.test(code)) {
+      return res.status(400).json({ message: "Code must contain only numbers" });
     }
 
     const offeringDef = await DefinedCard.findById(offeringCardId);
@@ -27,17 +32,19 @@ export async function createListing(req: Request, res: Response, next: NextFunct
       createdBy: user!.id,
       offeringCard: offeringDef.name,
       offeringCardId: offeringCardId,
-      offeringCount: Number(offeringCount),
+      offeringCount: 1,
       wantedCards: wantedNames,
       wantedCardIds: wantedCardIds,
       code: encryptedCode,
       expiresAt
     });
 
+    // Increment totalCount on the offered card definition
+    await DefinedCard.findByIdAndUpdate(offeringCardId, { $inc: { totalCount: 1 } });
+
     res.status(201).json({
       id: listing.id,
       offeringCard: listing.offeringCard,
-      offeringCount: listing.offeringCount,
       wantedCards: listing.wantedCards,
       status: listing.status,
       expiresAt: listing.expiresAt,
@@ -108,6 +115,64 @@ export async function getListings(req: Request, res: Response, next: NextFunctio
   }
 }
 
+export async function getMyListings(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = req.user;
+    const listings = await CardListing.find({ createdBy: user!.id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const allDefinedCards = await DefinedCard.find().lean();
+    const cardMap = new Map(allDefinedCards.map((c) => [c.name, c]));
+
+    // Get claims for these listings to show claimer info
+    const listingIds = listings.map((l) => l._id);
+    const claims = await Claim.find({ listingId: { $in: listingIds } })
+      .populate("claimedBy", "name email auth0Id")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Map listing ID → claim info
+    const claimMap = new Map<string, any>();
+    for (const c of claims) {
+      const lid = c.listingId.toString();
+      if (!claimMap.has(lid)) claimMap.set(lid, c);
+    }
+
+    const payload = listings.map((listing: any) => {
+      const offeringDef = cardMap.get(listing.offeringCard);
+      const claim = claimMap.get(listing._id.toString());
+      const claimer = claim?.claimedBy;
+
+      return {
+        id: listing._id,
+        offeringCard: listing.offeringCard,
+        offeringCardImage: offeringDef?.imageUrl ?? "",
+        offeringCardType: offeringDef?.type ?? "",
+        wantedCards: listing.wantedCards,
+        wantedCardImages: listing.wantedCards.map((name: string) => ({
+          name,
+          imageUrl: cardMap.get(name)?.imageUrl ?? "",
+          type: cardMap.get(name)?.type ?? ""
+        })),
+        status: listing.status,
+        expiresAt: listing.expiresAt,
+        createdAt: listing.createdAt,
+        claimCount: listing.claimCount,
+        claimedBy: claimer ? {
+          name: claimer.name || claimer.email?.split("@")[0] || "User",
+          email: claimer.email,
+        } : null,
+        claimedAt: claim?.createdAt ?? null,
+      };
+    });
+
+    res.json({ data: payload });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function deleteListing(req: Request, res: Response, next: NextFunction) {
   try {
     const user = req.user;
@@ -116,6 +181,11 @@ export async function deleteListing(req: Request, res: Response, next: NextFunct
     const listing = await CardListing.findOne({ _id: listingId, createdBy: user!.id });
     if (!listing) {
       return res.status(404).json({ message: "Listing not found or you are not authorized" });
+    }
+
+    // Decrement totalCount on the offered card definition
+    if (listing.offeringCardId) {
+      await DefinedCard.findByIdAndUpdate(listing.offeringCardId, { $inc: { totalCount: -1 } });
     }
 
     await listing.deleteOne();

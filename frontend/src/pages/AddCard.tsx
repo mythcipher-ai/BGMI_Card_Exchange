@@ -13,8 +13,7 @@ const AddCard = () => {
   const { isAuthenticated, isLoading: authLoading, login } = useAuth();
   const [cards, setCards] = useState<DefinedCard[]>([]);
   const [offering, setOffering] = useState("");
-  const [offeringCount, setOfferingCount] = useState(1);
-  const [lookingFor, setLookingFor] = useState<string[]>([]);
+  const [lookingFor, setLookingFor] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [cardsLoading, setCardsLoading] = useState(true);
@@ -30,14 +29,7 @@ const AddCard = () => {
       .finally(() => setCardsLoading(false));
   }, [authLoading, isAuthenticated]);
 
-  const toggleLooking = (cardId: string) => {
-    setLookingFor((prev) =>
-      prev.includes(cardId) ? prev.filter((c) => c !== cardId) : prev.length < 3 ? [...prev, cardId] : prev
-    );
-  };
-
   const selectedCard = cards.find((c) => c._id === offering);
-  const maxCount = selectedCard?.totalCount ?? 1;
 
   // Group cards by type
   const grouped = cards.reduce<Record<string, DefinedCard[]>>((acc, card) => {
@@ -47,16 +39,20 @@ const AddCard = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!offering || lookingFor.length === 0 || !code.trim()) {
+    if (!offering || !lookingFor || !code.trim()) {
       toast.error("Please fill all fields");
+      return;
+    }
+    if (!/^\d+$/.test(code.trim())) {
+      toast.error("Code must contain only numbers");
       return;
     }
     setLoading(true);
     try {
       await createListing({
         offeringCardId: offering,
-        offeringCount,
-        wantedCardIds: lookingFor,
+        offeringCount: 1,
+        wantedCardIds: [lookingFor],
         code: code.trim()
       });
       toast.success("Card listed successfully!");
@@ -92,7 +88,11 @@ const AddCard = () => {
             <label className="text-xs font-medium text-muted-foreground">Card You Have</label>
             <select
               value={offering}
-              onChange={(e) => { setOffering(e.target.value); setOfferingCount(1); }}
+              onChange={(e) => {
+                setOffering(e.target.value);
+                // Clear wanted card if it was the same as the new offering
+                if (e.target.value === lookingFor) setLookingFor("");
+              }}
               className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">Select card</option>
@@ -121,48 +121,35 @@ const AddCard = () => {
             </div>
           )}
 
-          {/* Count */}
-          {selectedCard && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                How many? (max {maxCount})
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={maxCount}
-                value={offeringCount}
-                onChange={(e) => setOfferingCount(Math.min(Number(e.target.value), maxCount))}
-                className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-          )}
-
-          {/* Looking For */}
+          {/* Looking For — single card */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Cards You Want (up to 3)</label>
+            <label className="text-xs font-medium text-muted-foreground">Card You Want</label>
             <div className="space-y-2">
-              {Object.entries(grouped).map(([type, typeCards]) => (
-                <div key={type}>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{type}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {typeCards.filter((c) => c._id !== offering).map((c) => (
-                      <button
-                        key={c._id}
-                        type="button"
-                        onClick={() => toggleLooking(c._id)}
-                        className={`rounded-md px-2.5 py-1 text-xs font-medium border transition-colors ${
-                          lookingFor.includes(c._id)
-                            ? "border-primary bg-primary/20 text-primary"
-                            : "border-border bg-secondary text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {c.name}
-                      </button>
-                    ))}
+              {Object.entries(grouped).map(([type, typeCards]) => {
+                const available = typeCards.filter((c) => c._id !== offering);
+                if (available.length === 0) return null;
+                return (
+                  <div key={type}>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{type}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {available.map((c) => (
+                        <button
+                          key={c._id}
+                          type="button"
+                          onClick={() => setLookingFor(lookingFor === c._id ? "" : c._id)}
+                          className={`rounded-md px-2.5 py-1 text-xs font-medium border transition-colors ${
+                            lookingFor === c._id
+                              ? "border-primary bg-primary/20 text-primary"
+                              : "border-border bg-secondary text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -171,9 +158,14 @@ const AddCard = () => {
             <label className="text-xs font-medium text-muted-foreground">Redemption Code</label>
             <input
               type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Enter your card code"
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, "");
+                setCode(val);
+              }}
+              placeholder="Enter numeric code"
               className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
               maxLength={30}
             />

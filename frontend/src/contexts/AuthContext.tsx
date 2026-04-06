@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
-import { fetchMe } from "@/lib/api";
+import { fetchMe, syncProfile } from "@/lib/api";
 
 interface UserProfile {
   id: string;
@@ -8,6 +8,8 @@ interface UserProfile {
   status: string;
   auth0Id: string;
   email?: string;
+  name?: string;
+  picture?: string;
   trustScore: number;
   totalClaims: number;
   successfulClaims: number;
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithRedirect,
     logout: auth0Logout,
     getAccessTokenSilently,
+    user: auth0User,
     error: auth0Error,
   } = useAuth0();
 
@@ -51,6 +54,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const token = await getAccessTokenSilently();
       localStorage.setItem("auth_token", token);
+
+      // Sync Auth0 profile data (name, picture) to backend
+      if (auth0User?.name || auth0User?.picture) {
+        await syncProfile({
+          name: auth0User.name,
+          picture: auth0User.picture,
+        }).catch(() => {}); // non-critical
+      }
+
       const me = await fetchMe();
       setUser(me as UserProfile);
     } catch (err) {
@@ -89,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         isAuthenticated: auth0Authenticated && !!user,
-        isLoading: auth0Loading || profileLoading,
+        isLoading: auth0Loading || profileLoading || (auth0Authenticated && !user),
         user,
         login,
         logout,

@@ -5,13 +5,13 @@ import { CardListing } from "../models/CardListing";
 
 export async function getAllUsers(_req: Request, res: Response, next: NextFunction) {
   try {
-    const users = await User.find()
+    const users = await User.find({ role: { $ne: "admin" } })
       .select("-__v")
       .sort({ createdAt: -1 })
       .lean();
 
     // Get IP usage per user from claims to detect multi-accounting
-    const claims = await Claim.find().select("claimedBy ipAddress").lean();
+    const claims = await Claim.find().select("claimedBy ipAddress listingId").lean();
 
     // Build IP -> users map
     const ipToUsers = new Map<string, Set<string>>();
@@ -35,11 +35,28 @@ export async function getAllUsers(_req: Request, res: Response, next: NextFuncti
       }
     }
 
-    const payload = users.map((u) => ({
-      ...u,
-      flagged: flaggedUsers.has(u._id.toString()),
-      sharedIps: userSharedIps.get(u._id.toString()) || []
-    }));
+    // Count listings and claimed listings per user
+    const allListings = await CardListing.find().select("createdBy status").lean();
+    const listingsCount = new Map<string, number>();
+    const claimedCount = new Map<string, number>();
+    for (const l of allListings) {
+      const uid = l.createdBy.toString();
+      listingsCount.set(uid, (listingsCount.get(uid) || 0) + 1);
+      if (l.status === "claimed") {
+        claimedCount.set(uid, (claimedCount.get(uid) || 0) + 1);
+      }
+    }
+
+    const payload = users.map((u) => {
+      const uid = u._id.toString();
+      return {
+        ...u,
+        listingsCount: listingsCount.get(uid) || 0,
+        claimedCount: claimedCount.get(uid) || 0,
+        flagged: flaggedUsers.has(uid),
+        sharedIps: userSharedIps.get(uid) || []
+      };
+    });
 
     res.json({ data: payload });
   } catch (error) {
@@ -82,7 +99,7 @@ export async function getUserDetail(req: Request, res: Response, next: NextFunct
 
     const sharedIpUsers = await User.find({
       _id: { $in: [...sharedWith.keys()] }
-    }).select("auth0Id email role status").lean();
+    }).select("auth0Id email name picture role status").lean();
 
     res.json({
       user,

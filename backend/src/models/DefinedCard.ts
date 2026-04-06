@@ -12,7 +12,7 @@ const definedCardSchema = new Schema<IDefinedCard>({
   type: { type: String, required: true },
   name: { type: String, required: true, unique: true },
   imageUrl: { type: String, required: true },
-  totalCount: { type: Number, required: true, min: 1 },
+  totalCount: { type: Number, default: 0, min: 0 },
   createdAt: { type: Date, default: () => new Date() }
 });
 

@@ -93,7 +93,7 @@ const Index = () => {
               </select>
             )}
           </div>
-          <div className="flex gap-1">
+          {/* <div className="flex gap-1">
             {(["newest", "trust"] as SortKey[]).map((key) => (
               <button
                 key={key}
@@ -107,7 +107,7 @@ const Index = () => {
                 {key === "newest" ? "Newest" : "Top Trust"}
               </button>
             ))}
-          </div>
+          </div> */}
         </div>
 
         {loading ? (

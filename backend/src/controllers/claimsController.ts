@@ -37,23 +37,26 @@ export async function createClaim(req: Request, res: Response, next: NextFunctio
       return res.status(429).json({ message: `Please wait ${config.claimCooldownSeconds} seconds between claims.` });
     }
 
+    // Check ownership first to avoid marking own listing as claimed
     const listing = await CardListing.findOneAndUpdate(
       {
         _id: listingId,
         status: "active",
         hidden: false,
-        expiresAt: { $gt: now }
+        expiresAt: { $gt: now },
+        createdBy: { $ne: user.id }
       },
       { $set: { status: "claimed" }, $inc: { claimCount: 1 } },
       { new: true }
     );
 
     if (!listing) {
+      // Distinguish between "not found" and "own listing"
+      const own = await CardListing.findOne({ _id: listingId, createdBy: user.id, status: "active" });
+      if (own) {
+        return res.status(403).json({ message: "You cannot claim your own listing" });
+      }
       return res.status(404).json({ message: "Listing is no longer available" });
-    }
-
-    if (listing.createdBy.toString() === user.id) {
-      return res.status(403).json({ message: "You cannot claim your own listing" });
     }
 
     const revealedCode = decryptText(listing.code);
