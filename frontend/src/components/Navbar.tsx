@@ -102,7 +102,7 @@ const Navbar = ({ onSearch }: NavbarProps) => {
               className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               <LogIn size={14} />
-              <span className="hidden sm:inline">Sign In</span>
+              Login
             </button>
           )}
         </div>

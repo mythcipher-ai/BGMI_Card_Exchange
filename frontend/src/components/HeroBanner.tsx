@@ -1,10 +1,11 @@
 const HERO_BG = "https://unsquaretripvalue.s3.ap-south-1.amazonaws.com/uploads/1775456215023_358b3e4b-d852-4ba5-9237-f0dbb6c9cf7a.jpg";
+const HERO_BG_2 = "https://unsquaretripvalue.s3.ap-south-1.amazonaws.com/uploads/1775460344889_8f0610b8-554e-42ff-8674-ad26367a74af.jpg";
 
 const HeroBanner = () => {
   return (
     <section className="relative overflow-hidden h-screen">
       {/* Background image */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 hidden md:block">
         <img
           src={HERO_BG}
           alt=""
@@ -14,8 +15,19 @@ const HeroBanner = () => {
         <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/60 to-background" />
       </div>
 
+      {/* Background image */}
+      <div className="absolute inset-0 block md:hidden">
+        <img
+          src={HERO_BG_2}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/60 to-background" />
+      </div>
+
       {/* Content */}
-      <div className="container relative py-12 sm:py-20 text-center space-y-4 mt-10 md:mt-20">
+      <div className="container relative py-12 sm:py-20 text-center space-y-4 mt-16 md:mt-20">
         <div className="inline-block mb-2">
           <span className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest bg-primary/20 text-primary border border-primary/30 rounded-full backdrop-blur-sm">
             BGMI x Jujutsu Kaisen Event
