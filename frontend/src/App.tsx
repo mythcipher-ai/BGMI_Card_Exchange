@@ -12,6 +12,7 @@ import UserManagement from "./pages/UserManagement";
 import Login from "./pages/Login";
 import Callback from "./pages/Callback";
 import NotFound from "./pages/NotFound";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,7 @@ const App = () => (
               <Route path="/admin/users" element={<UserManagement />} />
               <Route path="/login" element={<Login />} />
               <Route path="/callback" element={<Callback />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

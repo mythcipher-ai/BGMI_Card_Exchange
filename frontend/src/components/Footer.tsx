@@ -1,4 +1,5 @@
 import { Globe } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const InstaIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -63,9 +64,14 @@ const Footer = () => {
           </div>
         </div>
         <div className="h-px bg-border" />
-        <p className="text-center text-[10px] text-muted-foreground">
-          &copy; {new Date().getFullYear()} BGMI JJK Exchange Cards Platform. All game assets belong to their respective owners.
-        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p className="text-[10px] text-muted-foreground">
+            &copy; {new Date().getFullYear()} BGMI JJK Exchange Cards Platform. All game assets belong to their respective owners.
+          </p>
+          <Link to="/privacy" className="text-[10px] text-muted-foreground hover:text-primary transition-colors">
+            Privacy Policy
+          </Link>
+        </div>
       </div>
     </footer>
   );
