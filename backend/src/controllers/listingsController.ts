@@ -2,11 +2,14 @@ import { Request, Response, NextFunction } from "express";
 import { CardListing } from "../models/CardListing";
 import { Claim } from "../models/Claim";
 import { DefinedCard } from "../models/DefinedCard";
+import { User } from "../models/User";
 import { encryptText, maskCode } from "../utils/encryption";
 
 export async function createListing(req: Request, res: Response, next: NextFunction) {
   try {
     const user = req.user;
+    if (!user) return res.status(401).json({ message: "Authentication required" });
+
     const { offeringCardId, wantedCardIds, code, expiresInHours } = req.body;
 
     if (!offeringCardId || !Array.isArray(wantedCardIds) || wantedCardIds.length === 0 || wantedCardIds.length > 3 || !code) {
@@ -15,6 +18,17 @@ export async function createListing(req: Request, res: Response, next: NextFunct
 
     if (!/^\d+$/.test(code)) {
       return res.status(400).json({ message: "Code must contain only numbers" });
+    }
+
+    // ---- One-active-listing-per-user pre-check ----
+    // Bouncer for nice 409 messaging; the partial unique index is the canonical defense.
+    const existingActive = await CardListing.findOne({ createdBy: user.id, status: "active" }).lean();
+    if (existingActive) {
+      return res.status(409).json({
+        code: "ACTIVE_LISTING_EXISTS",
+        message: "You already have an active card listing. Delete it before creating a new one.",
+        existingId: existingActive._id
+      });
     }
 
     const offeringDef = await DefinedCard.findById(offeringCardId);
@@ -28,18 +42,31 @@ export async function createListing(req: Request, res: Response, next: NextFunct
     const wantedDefs = await DefinedCard.find({ _id: { $in: wantedCardIds } }).lean();
     const wantedNames = wantedDefs.map((d) => d.name);
 
-    const listing = await CardListing.create({
-      createdBy: user!.id,
-      offeringCard: offeringDef.name,
-      offeringCardId: offeringCardId,
-      offeringCount: 1,
-      wantedCards: wantedNames,
-      wantedCardIds: wantedCardIds,
-      code: encryptedCode,
-      expiresAt
-    });
+    let listing;
+    try {
+      listing = await CardListing.create({
+        createdBy: user.id,
+        offeringCard: offeringDef.name,
+        offeringCardId: offeringCardId,
+        offeringCount: 1,
+        wantedCards: wantedNames,
+        wantedCardIds: wantedCardIds,
+        code: encryptedCode,
+        expiresAt
+      });
+    } catch (err: any) {
+      // Race: another request created an active listing between the check and the write.
+      if (err?.code === 11000) {
+        return res.status(409).json({
+          code: "ACTIVE_LISTING_EXISTS",
+          message: "You already have an active card listing."
+        });
+      }
+      throw err;
+    }
 
-    // Increment totalCount on the offered card definition
+    // Update the user's denormalized flag (used by frontend eligibility & UI gating).
+    await User.findByIdAndUpdate(user.id, { $set: { hasActiveListing: true } });
     await DefinedCard.findByIdAndUpdate(offeringCardId, { $inc: { totalCount: 1 } });
 
     res.status(201).json({
@@ -78,7 +105,6 @@ export async function getListings(req: Request, res: Response, next: NextFunctio
       .limit(pageSize)
       .lean();
 
-    // Fetch all defined cards to attach image URLs
     const allDefinedCards = await DefinedCard.find().lean();
     const cardMap = new Map(allDefinedCards.map((c) => [c.name, c]));
 
@@ -125,14 +151,12 @@ export async function getMyListings(req: Request, res: Response, next: NextFunct
     const allDefinedCards = await DefinedCard.find().lean();
     const cardMap = new Map(allDefinedCards.map((c) => [c.name, c]));
 
-    // Get claims for these listings to show claimer info
     const listingIds = listings.map((l) => l._id);
     const claims = await Claim.find({ listingId: { $in: listingIds } })
       .populate("claimedBy", "name email auth0Id")
       .sort({ createdAt: -1 })
       .lean();
 
-    // Map listing ID → claim info
     const claimMap = new Map<string, any>();
     for (const c of claims) {
       const lid = c.listingId.toString();
@@ -183,12 +207,22 @@ export async function deleteListing(req: Request, res: Response, next: NextFunct
       return res.status(404).json({ message: "Listing not found or you are not authorized" });
     }
 
-    // Decrement totalCount on the offered card definition
+    const wasActive = listing.status === "active";
+
     if (listing.offeringCardId) {
       await DefinedCard.findByIdAndUpdate(listing.offeringCardId, { $inc: { totalCount: -1 } });
     }
 
     await listing.deleteOne();
+
+    // If the deleted listing was the user's active one, free their slot.
+    if (wasActive) {
+      const stillActive = await CardListing.exists({ createdBy: user!.id, status: "active" });
+      if (!stillActive) {
+        await User.findByIdAndUpdate(user!.id, { $set: { hasActiveListing: false } });
+      }
+    }
+
     res.json({ message: "Listing deleted" });
   } catch (error) {
     next(error);

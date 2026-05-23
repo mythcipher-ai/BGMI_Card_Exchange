@@ -13,6 +13,9 @@ import Login from "./pages/Login";
 import Callback from "./pages/Callback";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Terms from "./pages/Terms";
+import About from "./pages/About";
+import UserGuide from "./pages/UserGuide";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +46,9 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/callback" element={<Callback />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/guide" element={<UserGuide />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

@@ -37,7 +37,6 @@ export async function createClaim(req: Request, res: Response, next: NextFunctio
       return res.status(429).json({ message: `Please wait ${config.claimCooldownSeconds} seconds between claims.` });
     }
 
-    // Check ownership first to avoid marking own listing as claimed
     const listing = await CardListing.findOneAndUpdate(
       {
         _id: listingId,
@@ -51,7 +50,6 @@ export async function createClaim(req: Request, res: Response, next: NextFunctio
     );
 
     if (!listing) {
-      // Distinguish between "not found" and "own listing"
       const own = await CardListing.findOne({ _id: listingId, createdBy: user.id, status: "active" });
       if (own) {
         return res.status(403).json({ message: "You cannot claim your own listing" });
@@ -73,6 +71,9 @@ export async function createClaim(req: Request, res: Response, next: NextFunctio
     user.lastClaimedAt = now;
     user.dailyClaims += 1;
     await user.save();
+
+    // Free the listing owner's slot — the listing is now "claimed", no longer "active".
+    await User.findByIdAndUpdate(listing.createdBy, { $set: { hasActiveListing: false } });
 
     res.json({
       listingId: listing.id,

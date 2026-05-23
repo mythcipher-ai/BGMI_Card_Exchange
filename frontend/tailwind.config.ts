@@ -52,9 +52,11 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
         neon: {
-          green: "hsl(var(--neon-green))",
           blue: "hsl(var(--neon-blue))",
+          cyan: "hsl(var(--neon-cyan))",
           yellow: "hsl(var(--neon-yellow))",
+          /* legacy alias to avoid breakage on any lingering `bg-neon-green` */
+          green: "hsl(var(--neon-blue))",
         },
         trust: {
           high: "hsl(var(--trust-high))",

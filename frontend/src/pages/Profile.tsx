@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
-import Footer from "@/components/Footer";
 import ProfileStats from "@/components/ProfileStats";
-import { Trash2, Loader2, CheckCircle, Clock } from "lucide-react";
+import GiftRequestList from "@/components/GiftRequestList";
+import { Trash2, Loader2, CheckCircle, Clock, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { fetchMyListings, deleteListing, type MyListing } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 function timeAgo(date: string) {
   const diff = Date.now() - new Date(date).getTime();
@@ -18,9 +18,16 @@ function timeAgo(date: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+type Tab = "listings" | "gifts-in" | "gifts-out";
+
 const Profile = () => {
-  const { isAuthenticated, isLoading: authLoading, user: authUser, login } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user: authUser, login, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const initialTab: Tab = params.get("tab") === "gifts" ? "gifts-in"
+    : params.get("tab") === "gifts-out" ? "gifts-out"
+    : "listings";
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [myListings, setMyListings] = useState<MyListing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,17 +49,29 @@ const Profile = () => {
       await deleteListing(id);
       toast.success("Listing deleted");
       setMyListings((prev) => prev.filter((l) => l.id !== id));
+      refreshUser();
     } catch (err: any) {
       toast.error(err.message || "Failed to delete");
     }
   };
 
+  const setActiveTab = (t: Tab) => {
+    setTab(t);
+    const tabParam = t === "gifts-in" ? "gifts" : t === "gifts-out" ? "gifts-out" : null;
+    if (tabParam) {
+      setParams({ tab: tabParam });
+    } else {
+      params.delete("tab");
+      setParams(params);
+    }
+  };
+
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen pb-16 sm:pb-0">
+      <div className="min-h-screen pb-16 sm:pb-0 flex flex-col">
         <Navbar />
-        <main className="container py-16 flex justify-center">
-          <Loader2 className="animate-spin text-primary" size={24} />
+        <main className="container flex-1 flex items-center justify-center py-16">
+          <Loader2 className="animate-spin text-primary" size={24} aria-label="Loading" />
         </main>
         <BottomNav />
       </div>
@@ -78,10 +97,21 @@ const Profile = () => {
                 displayName[0]?.toUpperCase()
               )}
             </div>
-            <div>
-              <p className="font-heading text-sm font-semibold text-foreground">{displayName}</p>
-              <p className="text-xs text-muted-foreground">Daily claims: {user?.dailyClaims ?? 0}/5</p>
+            <div className="flex-1 min-w-0">
+              <p className="font-heading text-sm font-semibold text-foreground truncate">{displayName}</p>
+              <p className="text-xs text-muted-foreground">
+                Daily claims: {user?.dailyClaims ?? 0}/5
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={logout}
+              aria-label="Log out"
+              className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 text-destructive px-3 py-1.5 text-xs font-semibold hover:bg-destructive/10 transition-colors shrink-0"
+            >
+              <LogOut size={14} aria-hidden="true" />
+              Logout
+            </button>
           </div>
 
           <ProfileStats
@@ -90,74 +120,119 @@ const Profile = () => {
           />
         </div>
 
-        {/* Active listings */}
-        <section className="space-y-2">
-          <h2 className="font-heading text-sm font-semibold text-foreground">Active Listings</h2>
-          {activeListings.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-4 text-center">No active listings</p>
-          ) : (
-            activeListings.map((listing) => (
-              <div key={listing.id} className="flex items-center justify-between rounded-md border border-border bg-card p-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  {listing.offeringCardImage && (
-                    <img src={listing.offeringCardImage} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm text-foreground truncate">{listing.offeringCard}</p>
-                    <p className="text-xs text-muted-foreground">Wants: {listing.wantedCards[0]}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                    <Clock size={10} /> {timeAgo(listing.createdAt)}
-                  </span>
-                  <button
-                    onClick={() => handleDelete(listing.id)}
-                    className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </section>
+        <div role="tablist" aria-label="Profile sections" className="flex gap-1 border-b border-border">
+          <TabButton active={tab === "listings"} onClick={() => setActiveTab("listings")}>
+            My Listings
+          </TabButton>
+          <TabButton active={tab === "gifts-in"} onClick={() => setActiveTab("gifts-in")}>
+            Gift Requests
+          </TabButton>
+          <TabButton active={tab === "gifts-out"} onClick={() => setActiveTab("gifts-out")}>
+            Sent
+          </TabButton>
+        </div>
 
-        {/* Claimed listings */}
-        <section className="space-y-2">
-          <h2 className="font-heading text-sm font-semibold text-foreground">Claimed</h2>
-          {claimedListings.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-4 text-center">No claimed listings yet</p>
-          ) : (
-            claimedListings.map((listing) => (
-              <div key={listing.id} className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-1.5">
-                <div className="flex items-center gap-3">
-                  {listing.offeringCardImage && (
-                    <img src={listing.offeringCardImage} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground truncate">{listing.offeringCard}</p>
-                    <p className="text-xs text-muted-foreground">Wanted: {listing.wantedCards[0]}</p>
+        {tab === "listings" && (
+          <>
+            <section className="space-y-2">
+              <h2 className="font-heading text-sm font-semibold text-foreground">Active Listing</h2>
+              {activeListings.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">No active listing. Create one from the home page.</p>
+              ) : (
+                activeListings.map((listing) => (
+                  <div key={listing.id} className="flex items-center justify-between rounded-md border border-border bg-card p-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {listing.offeringCardImage && (
+                        <img src={listing.offeringCardImage} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm text-foreground truncate">{listing.offeringCard}</p>
+                        <p className="text-xs text-muted-foreground">Wants: {listing.wantedCards[0]}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Clock size={10} aria-hidden="true" /> {timeAgo(listing.createdAt)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(listing.id)}
+                        aria-label={`Delete listing ${listing.offeringCard}`}
+                        className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
-                  <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-primary/20 text-primary rounded flex items-center gap-1 shrink-0">
-                    <CheckCircle size={10} /> Claimed
-                  </span>
-                </div>
-                {listing.claimedBy && (
-                  <div className="text-xs text-muted-foreground pl-13">
-                    Claimed by <span className="text-foreground font-medium">{listing.claimedBy.name}</span>
-                    {listing.claimedAt && <span> &middot; {timeAgo(listing.claimedAt)}</span>}
+                ))
+              )}
+            </section>
+
+            <section className="space-y-2">
+              <h2 className="font-heading text-sm font-semibold text-foreground">Past Trades</h2>
+              {claimedListings.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">No claimed listings yet</p>
+              ) : (
+                claimedListings.map((listing) => (
+                  <div key={listing.id} className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-1.5">
+                    <div className="flex items-center gap-3">
+                      {listing.offeringCardImage && (
+                        <img src={listing.offeringCardImage} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground truncate">{listing.offeringCard}</p>
+                        <p className="text-xs text-muted-foreground">Wanted: {listing.wantedCards[0]}</p>
+                      </div>
+                      <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-primary/20 text-primary rounded flex items-center gap-1 shrink-0">
+                        <CheckCircle size={10} aria-hidden="true" /> Claimed
+                      </span>
+                    </div>
+                    {listing.claimedBy && (
+                      <div className="text-xs text-muted-foreground">
+                        Claimed by <span className="text-foreground font-medium">{listing.claimedBy.name}</span>
+                        {listing.claimedAt && <span> · {timeAgo(listing.claimedAt)}</span>}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))
-          )}
-        </section>
+                ))
+              )}
+            </section>
+          </>
+        )}
+
+        {tab === "gifts-in" && (
+          <section className="space-y-2">
+            <h2 className="font-heading text-sm font-semibold text-foreground">Incoming Gift Requests</h2>
+            <GiftRequestList direction="incoming" />
+          </section>
+        )}
+
+        {tab === "gifts-out" && (
+          <section className="space-y-2">
+            <h2 className="font-heading text-sm font-semibold text-foreground">Gift Requests You Sent</h2>
+            <GiftRequestList direction="outgoing" />
+          </section>
+        )}
       </main>
-      <Footer />
       <BottomNav />
     </div>
   );
 };
+
+const TabButton = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) => (
+  <button
+    type="button"
+    role="tab"
+    aria-selected={active}
+    onClick={onClick}
+    className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+      active
+        ? "border-primary text-primary"
+        : "border-transparent text-muted-foreground hover:text-foreground"
+    }`}
+  >
+    {children}
+  </button>
+);
 
 export default Profile;

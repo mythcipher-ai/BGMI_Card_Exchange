@@ -9,9 +9,13 @@ import { claimsRouter } from "./routes/claims";
 import { reportsRouter } from "./routes/reports";
 import { authRouter } from "./routes/auth";
 import { adminRouter } from "./routes/admin";
+import { giftsRouter } from "./routes/gifts";
 import { ipRateLimiter } from "./middleware/rateLimit";
 import { DefinedCard } from "./models/DefinedCard";
 import { CardListing } from "./models/CardListing";
+import { Claim } from "./models/Claim";
+import { User } from "./models/User";
+import { Event } from "./models/Event";
 import { maskCode } from "./utils/encryption";
 
 export const app = express();
@@ -21,17 +25,23 @@ app.use(cors());
 app.use(json());
 app.use(ipRateLimiter);
 
-// Public routes (no auth required)
+// ---- Public routes (no auth) ----
+// Only return cards whose event is ACTIVE. Draft events stay hidden from
+// regular users so they can't list a card from an unfinished event.
 app.get("/api/public/cards", async (_req, res, next) => {
   try {
-    const cards = await DefinedCard.find().sort({ type: 1, name: 1 }).lean();
+    const activeEventIds = await Event.find({ status: "active" }).distinct("_id");
+    const cards = await DefinedCard.find({ eventId: { $in: activeEventIds } })
+      .sort({ type: 1, name: 1 })
+      .lean();
     res.json({ data: cards });
   } catch (error) { next(error); }
 });
 
 app.get("/api/public/cards/types", async (_req, res, next) => {
   try {
-    const types = await DefinedCard.distinct("type");
+    const activeEventIds = await Event.find({ status: "active" }).distinct("_id");
+    const types = await DefinedCard.distinct("type", { eventId: { $in: activeEventIds } });
     res.json({ data: types });
   } catch (error) { next(error); }
 });
@@ -64,7 +74,8 @@ app.get("/api/public/listings", async (req, res, next) => {
           name: n, imageUrl: m.get(n)?.imageUrl ?? "", type: m.get(n)?.type ?? ""
         })),
         status: l.status, expiresAt: l.expiresAt, createdAt: l.createdAt,
-        claimCount: l.claimCount, trustScore: l.createdBy?.trustScore ?? 0,
+        claimCount: l.claimCount,
+        trustScore: l.createdBy?.trustScore ?? 0,
         maskedCode: maskCode("0000-0000-0000-0000")
       };
     }).sort((a, b) => byTrust ? b.trustScore - a.trustScore : 0);
@@ -73,12 +84,27 @@ app.get("/api/public/listings", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-// Authenticated routes
+app.get("/api/public/stats", async (_req, res, next) => {
+  try {
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const [activeListings, listingsToday, totalTrades, activeTraders] = await Promise.all([
+      CardListing.countDocuments({ status: "active", hidden: false }),
+      CardListing.countDocuments({ createdAt: { $gte: startOfToday } }),
+      Claim.countDocuments({}),
+      User.countDocuments({ status: "active", hasActiveListing: true })
+    ]);
+    res.json({ data: { activeTraders, activeListings, totalTrades, listingsToday } });
+  } catch (error) { next(error); }
+});
+
+// ---- Authenticated routes ----
 app.use("/api", authMiddleware, attachCurrentUser);
 app.use("/api/me", authRouter);
 app.use("/api/listings", listingsRouter);
 app.use("/api/claims", claimsRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/gifts", giftsRouter);
 app.use("/api/admin", adminRouter);
 
 app.use(errorHandler);

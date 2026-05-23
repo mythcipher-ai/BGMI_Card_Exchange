@@ -31,15 +31,26 @@ const ClaimModal = ({ card, onClose, onClaimed }: ClaimModalProps) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="claim-modal-title"
+    >
       <div
-        className="w-full max-w-sm rounded-lg border border-border bg-card p-5 space-y-4 animate-slide-up"
+        className="w-full max-w-sm rounded-lg border border-primary/40 bg-card p-5 space-y-4 animate-slide-up glow-blue"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-heading text-base font-semibold text-foreground">Claim Card</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X size={18} />
+          <h2 id="claim-modal-title" className="font-heading text-base font-semibold text-foreground">Claim Card</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close claim dialog"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 

@@ -21,6 +21,8 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
       successfulClaims: user.successfulClaims,
       reportsCount: user.reportsCount,
       dailyClaims: user.dailyClaims,
+      instagramHandle: user.instagramHandle,
+      hasActiveListing: user.hasActiveListing ?? false,
       createdAt: user.createdAt
     });
   } catch (error) {

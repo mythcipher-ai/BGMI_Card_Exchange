@@ -137,3 +137,29 @@ export async function unblockUser(req: Request, res: Response, next: NextFunctio
     next(error);
   }
 }
+
+// Admin sets a user to "user" or "manager".
+// Cannot promote to "admin" through the API; admin role is reserved for
+// out-of-band assignment by a maintainer.
+export async function setUserRole(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const { role } = req.body ?? {};
+
+    if (role !== "user" && role !== "manager") {
+      return res.status(400).json({ message: "Role must be 'user' or 'manager'" });
+    }
+
+    const target = await User.findById(id);
+    if (!target) return res.status(404).json({ message: "User not found" });
+    if (target.role === "admin") {
+      return res.status(403).json({ message: "Admin role cannot be modified through this endpoint" });
+    }
+
+    target.role = role;
+    await target.save();
+    res.json({ message: "Role updated", user: target });
+  } catch (error) {
+    next(error);
+  }
+}

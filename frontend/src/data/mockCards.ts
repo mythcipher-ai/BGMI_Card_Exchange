@@ -1,6 +1,6 @@
-import type { CardData } from "@/components/CardItem";
-
-export const mockCards: CardData[] = [
+// Legacy mock data. Not imported anywhere. Kept as a stub so existing imports
+// (if any) don't break, but typed loosely since the shape no longer matches CardData.
+export const mockCards: any[] = [
   {
     id: "1", name: "AWM Glacier", image: "https://placehold.co/400x300/1e293b/94a3b8?text=AWM+Glacier",
     offering: "AWM Glacier", lookingFor: ["M416 Fool's Gold", "Kar98k"], trustScore: 92,

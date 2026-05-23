@@ -14,6 +14,7 @@ export interface ICardListing extends Document {
   claimCount: number;
   reports: number;
   hidden: boolean;
+  popularityOffered: number;
   createdAt: Date;
   expiresAt: Date;
 }
@@ -30,8 +31,22 @@ const cardListingSchema = new Schema<ICardListing>({
   claimCount: { type: Number, default: 0 },
   reports: { type: Number, default: 0 },
   hidden: { type: Boolean, default: false },
+  popularityOffered: { type: Number, default: 0, min: 0 },
   createdAt: { type: Date, default: () => new Date() },
   expiresAt: { type: Date, required: true }
 });
+
+// One ACTIVE listing per user.
+// Historic (claimed/expired) listings are unconstrained — only the active row is unique.
+cardListingSchema.index(
+  { createdBy: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: "active" },
+    name: "one_active_listing_per_user"
+  }
+);
+
+cardListingSchema.index({ status: 1, hidden: 1, createdAt: -1 });
 
 export const CardListing = model<ICardListing>("CardListing", cardListingSchema);

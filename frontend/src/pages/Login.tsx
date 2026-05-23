@@ -1,7 +1,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, KeyRound } from "lucide-react";
 
 const Login = () => {
   const { isAuthenticated, isLoading, login } = useAuth();
@@ -15,11 +15,11 @@ const Login = () => {
     <div className="flex min-h-screen items-center justify-center px-4 bg-background">
       <div className="w-full max-w-sm space-y-6 text-center">
         <div>
-          <h1 className="font-heading text-3xl font-bold text-primary glow-text-green">
-            JJK EXCHANGE
+          <h1 className="font-heading text-3xl font-bold text-primary glow-text-blue tracking-wider">
+            BLUE LOCK · EXCHANGE
           </h1>
           <p className="text-sm text-muted-foreground mt-2">
-            BGMI x Jujutsu Kaisen Card Trading
+            A fan-made BGMI card exchange community
           </p>
         </div>
 
@@ -34,9 +34,12 @@ const Login = () => {
             </div>
           ) : (
             <button
+              type="button"
               onClick={() => login()}
-              className="w-full rounded-md bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+              aria-label="Sign in or sign up"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/30 hover:bg-primary/90 hover:shadow-primary/50 transition-all glow-blue active:scale-[0.98]"
             >
+              <KeyRound size={16} aria-hidden="true" />
               Sign In / Sign Up
             </button>
           )}

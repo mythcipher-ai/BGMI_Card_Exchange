@@ -6,51 +6,58 @@
 
 @layer base {
   :root {
-    --background: 222 47% 4%;
-    --foreground: 210 40% 96%;
+    /* Blue Lock palette
+       - background: deep navy
+       - foreground: white
+       - primary: Electric Blue #0066FF
+       - accent: Neon Cyan
+    */
+    --background: 222 60% 5%;
+    --foreground: 0 0% 100%;
 
-    --card: 222 47% 7%;
-    --card-foreground: 210 40% 96%;
+    --card: 222 55% 8%;
+    --card-foreground: 0 0% 100%;
 
-    --popover: 222 47% 7%;
-    --popover-foreground: 210 40% 96%;
+    --popover: 222 55% 8%;
+    --popover-foreground: 0 0% 100%;
 
-    --primary: 142 76% 46%;
-    --primary-foreground: 222 47% 4%;
+    --primary: 217 100% 50%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 33% 14%;
-    --secondary-foreground: 210 40% 96%;
+    --secondary: 222 40% 14%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 217 33% 14%;
-    --muted-foreground: 215 20% 55%;
+    --muted: 222 40% 14%;
+    --muted-foreground: 215 25% 72%;
 
-    --accent: 199 89% 48%;
-    --accent-foreground: 222 47% 4%;
+    --accent: 190 100% 55%;
+    --accent-foreground: 222 60% 5%;
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217 33% 18%;
-    --input: 217 33% 18%;
-    --ring: 142 76% 46%;
+    --border: 217 35% 22%;
+    --input: 217 35% 22%;
+    --ring: 217 100% 55%;
 
     --radius: 0.5rem;
 
-    --neon-green: 142 76% 46%;
-    --neon-blue: 199 89% 48%;
+    --neon-blue: 217 100% 50%;
+    --neon-cyan: 190 100% 55%;
     --neon-yellow: 45 93% 58%;
-    --trust-high: 142 76% 46%;
+
+    --trust-high: 190 100% 55%;
     --trust-mid: 45 93% 58%;
     --trust-low: 0 84% 60%;
 
-    --sidebar-background: 222 47% 4%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-primary: 142 76% 46%;
-    --sidebar-primary-foreground: 222 47% 4%;
-    --sidebar-accent: 217 33% 14%;
-    --sidebar-accent-foreground: 210 40% 96%;
-    --sidebar-border: 217 33% 18%;
-    --sidebar-ring: 142 76% 46%;
+    --sidebar-background: 222 60% 5%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 217 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 40% 14%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 217 35% 22%;
+    --sidebar-ring: 217 100% 50%;
   }
 }
 
@@ -64,16 +71,34 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
   }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
 }
 
 @layer utilities {
-  .glow-green {
-    box-shadow: 0 0 12px hsl(142 76% 46% / 0.25);
-  }
   .glow-blue {
-    box-shadow: 0 0 12px hsl(199 89% 48% / 0.25);
+    box-shadow: 0 0 14px hsl(217 100% 50% / 0.35);
   }
-  .glow-text-green {
-    text-shadow: 0 0 8px hsl(142 76% 46% / 0.5);
+  .glow-cyan {
+    box-shadow: 0 0 14px hsl(190 100% 55% / 0.35);
+  }
+  .glow-text-blue {
+    text-shadow: 0 0 10px hsl(217 100% 50% / 0.6);
+  }
+  .glow-text-cyan {
+    text-shadow: 0 0 10px hsl(190 100% 55% / 0.55);
+  }
+  /* Backwards-compat aliases so any lingering class usages still render */
+  .glow-green { box-shadow: 0 0 14px hsl(217 100% 50% / 0.35); }
+  .glow-text-green { text-shadow: 0 0 10px hsl(217 100% 50% / 0.6); }
+
+  .field-grid {
+    background-image:
+      linear-gradient(hsl(217 100% 50% / 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(217 100% 50% / 0.08) 1px, transparent 1px);
+    background-size: 32px 32px;
   }
 }

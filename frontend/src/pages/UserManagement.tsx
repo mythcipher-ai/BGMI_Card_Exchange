@@ -1,17 +1,17 @@
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { toast } from "sonner";
 import {
   adminGetUsers,
   adminGetUserDetail,
   adminBlockUser,
   adminUnblockUser,
+  adminSetUserRole,
   type AdminUser
 } from "@/lib/api";
 import {
   Loader2, AlertTriangle, Ban, CheckCircle, X,
-  ChevronRight, Clock, Shield
+  ChevronRight, Clock, Shield, Briefcase, UserCog
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -102,6 +102,19 @@ const UserManagement = () => {
     }
   };
 
+  const handleSetRole = async (userId: string, role: "user" | "manager") => {
+    try {
+      await adminSetUserRole(userId, role);
+      toast.success(role === "manager" ? "Promoted to Manager" : "Demoted to User");
+      setUsers((prev) => prev.map((u) => u._id === userId ? { ...u, role } : u));
+      if (selectedUser?.user._id === userId) {
+        setSelectedUser((prev) => prev ? { ...prev, user: { ...prev.user, role } } : null);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to change role");
+    }
+  };
+
   const filtered = users.filter((u) => {
     if (filter === "flagged") return u.flagged;
     if (filter === "blocked") return u.status === "blocked";
@@ -114,7 +127,7 @@ const UserManagement = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="container py-4 flex-1 max-w-4xl mx-auto space-y-4">
+      <main className="container py-4 flex-1 max-w-7xl mx-auto space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="font-heading text-xl font-bold text-foreground">User Management</h1>
           <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-destructive/20 text-destructive border border-destructive/30 rounded">
@@ -180,7 +193,10 @@ const UserManagement = () => {
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-foreground truncate">{getDisplayName(u)}</span>
                     {u.role === "admin" && (
-                      <Shield size={10} className="text-primary shrink-0" />
+                      <Shield size={10} className="text-primary shrink-0" aria-label="Admin" />
+                    )}
+                    {u.role === "manager" && (
+                      <Briefcase size={10} className="text-accent shrink-0" aria-label="Manager" />
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -228,7 +244,19 @@ const UserManagement = () => {
 
                   {/* User info */}
                   <div className="rounded-md bg-secondary p-3 space-y-1 text-sm">
-                    <p className="text-foreground font-medium">{getDisplayName(selectedUser.user)}</p>
+                    <p className="text-foreground font-medium flex items-center gap-2">
+                      {getDisplayName(selectedUser.user)}
+                      {selectedUser.user.role === "admin" && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-primary/20 text-primary border border-primary/40 rounded">
+                          <Shield size={9} aria-hidden="true" /> Admin
+                        </span>
+                      )}
+                      {selectedUser.user.role === "manager" && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-accent/20 text-accent border border-accent/40 rounded">
+                          <Briefcase size={9} aria-hidden="true" /> Manager
+                        </span>
+                      )}
+                    </p>
                     {selectedUser.user.email && (
                       <p className="text-xs text-muted-foreground">{selectedUser.user.email}</p>
                     )}
@@ -238,6 +266,37 @@ const UserManagement = () => {
                       <span>Claimed: {selectedUser.listings.filter((l: any) => l.status === "claimed").length}</span>
                     </div>
                   </div>
+
+                  {/* Role controls (Admin can promote/demote between user and manager; admins are off-limits via API). */}
+                  {selectedUser.user.role !== "admin" && (
+                    <div className="rounded-md border border-border p-3 space-y-2">
+                      <h3 className="text-xs font-semibold text-foreground flex items-center gap-1">
+                        <UserCog size={12} aria-hidden="true" /> Role
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground">
+                        Managers can manage cards and events. They cannot access user management.
+                      </p>
+                      <div className="flex gap-2">
+                        {selectedUser.user.role === "user" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSetRole(selectedUser.user._id, "manager")}
+                            className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground hover:bg-accent/90 inline-flex items-center gap-1"
+                          >
+                            <Briefcase size={11} aria-hidden="true" /> Promote to Manager
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSetRole(selectedUser.user._id, "user")}
+                            className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary inline-flex items-center gap-1"
+                          >
+                            Demote to User
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* IP Info */}
                   {selectedUser.ips.length > 0 && (
@@ -333,7 +392,6 @@ const UserManagement = () => {
           </div>
         )}
       </main>
-      <Footer />
     </div>
   );
 };

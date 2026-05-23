@@ -2,9 +2,11 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { useAuth0 } from "@auth0/auth0-react";
 import { fetchMe, syncProfile } from "@/lib/api";
 
+export type UserRole = "user" | "admin" | "manager";
+
 interface UserProfile {
   id: string;
-  role: "user" | "admin";
+  role: UserRole;
   status: string;
   auth0Id: string;
   email?: string;
@@ -15,6 +17,8 @@ interface UserProfile {
   successfulClaims: number;
   reportsCount: number;
   dailyClaims: number;
+  instagramHandle?: string;
+  hasActiveListing: boolean;
 }
 
 interface AuthContextType {
