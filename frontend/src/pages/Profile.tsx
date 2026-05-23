@@ -3,7 +3,8 @@ import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
 import ProfileStats from "@/components/ProfileStats";
 import GiftRequestList from "@/components/GiftRequestList";
-import { Trash2, Loader2, CheckCircle, Clock, LogOut } from "lucide-react";
+import { Trash2, Loader2, CheckCircle, Clock, LogOut, Hourglass } from "lucide-react";
+import { expiresIn, EXPIRY_TONE_CLASS } from "@/lib/time";
 import { toast } from "sonner";
 import { fetchMyListings, deleteListing, type MyListing } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -139,32 +140,41 @@ const Profile = () => {
               {activeListings.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-4 text-center">No active listing. Create one from the home page.</p>
               ) : (
-                activeListings.map((listing) => (
-                  <div key={listing.id} className="flex items-center justify-between rounded-md border border-border bg-card p-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {listing.offeringCardImage && (
-                        <img src={listing.offeringCardImage} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-sm text-foreground truncate">{listing.offeringCard}</p>
-                        <p className="text-xs text-muted-foreground">Wants: {listing.wantedCards[0]}</p>
+                activeListings.map((listing) => {
+                  const expiry = expiresIn(listing.expiresAt);
+                  return (
+                    <div key={listing.id} className="rounded-md border border-border bg-card p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {listing.offeringCardImage && (
+                            <img src={listing.offeringCardImage} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm text-foreground truncate">{listing.offeringCard}</p>
+                            <p className="text-xs text-muted-foreground">Wants: {listing.wantedCards[0]}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(listing.id)}
+                          aria-label={`Delete listing ${listing.offeringCard}`}
+                          className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors shrink-0"
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Clock size={10} aria-hidden="true" /> Listed {timeAgo(listing.createdAt)}
+                        </span>
+                        <span className={`flex items-center gap-1 font-medium ${EXPIRY_TONE_CLASS[expiry.tone]}`}>
+                          <Hourglass size={10} aria-hidden="true" />
+                          {expiry.tone === "expired" ? "Expired" : `Expires in ${expiry.label.replace(" left", "")}`}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <Clock size={10} aria-hidden="true" /> {timeAgo(listing.createdAt)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(listing.id)}
-                        aria-label={`Delete listing ${listing.offeringCard}`}
-                        className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                      >
-                        <Trash2 size={14} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </section>
 

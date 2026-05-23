@@ -1,4 +1,5 @@
-import { ArrowRightLeft, Clock, Gift } from "lucide-react";
+import { ArrowRightLeft, Clock, Gift, Hourglass } from "lucide-react";
+import { expiresIn, EXPIRY_TONE_CLASS } from "@/lib/time";
 
 export interface CardData {
   id: string;
@@ -31,6 +32,9 @@ function timeAgo(date: string) {
 }
 
 const CardItem = ({ card, onClaim, onGift }: CardItemProps) => {
+  const expiry = expiresIn(card.expiresAt);
+  const isExpired = expiry.tone === "expired";
+
   return (
     <article
       className="group rounded-lg border border-border bg-card overflow-hidden transition-all hover:border-primary/50 hover:glow-blue animate-slide-up"
@@ -80,14 +84,22 @@ const CardItem = ({ card, onClaim, onGift }: CardItemProps) => {
           )}
         </div>
 
+        <div className={`flex items-center gap-1 text-[10px] font-medium ${EXPIRY_TONE_CLASS[expiry.tone]}`}>
+          <Hourglass size={10} aria-hidden="true" />
+          <span>
+            {isExpired ? "Expired" : `Expires in ${expiry.label.replace(" left", "")}`}
+          </span>
+        </div>
+
         <div className="flex gap-1.5 mt-1">
           <button
             type="button"
             onClick={() => onClaim(card)}
-            className="flex-1 rounded-md bg-primary py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors active:scale-[0.98]"
+            disabled={isExpired}
+            className="flex-1 rounded-md bg-primary py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label={`Claim ${card.offeringCard}`}
           >
-            Claim
+            {isExpired ? "Expired" : "Claim"}
           </button>
           {onGift && (
             <button
