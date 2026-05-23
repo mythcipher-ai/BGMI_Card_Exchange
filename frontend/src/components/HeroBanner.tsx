@@ -79,7 +79,7 @@ const HeroBanner = () => {
 
         {/* Title wrapper. On mobile, flex-1 lets the title vertically center
             in the available space and pushes the bottom block down. */}
-        <div className="pt-40 pb-32 md:pt-0 md:pb-0 sm:flex-none flex flex-col items-center justify-center">
+        <div className="pt-[13rem] pb-[3rem] md:pt-14 md:pb-0 sm:flex-none flex flex-col items-center justify-center">
           <h1 className="font-heading text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.05] drop-shadow-lg">
             Find Your Missing
             <br />
@@ -88,7 +88,7 @@ const HeroBanner = () => {
           </h1>
 
           {/* Description: desktop only. */}
-          <p className="hidden sm:block text-sm sm:text-base text-foreground/85 max-w-xl mx-auto leading-relaxed drop-shadow mt-6">
+          <p className="block text-sm sm:text-base text-foreground/85 max-w-xl mx-auto leading-relaxed drop-shadow mt-6">
             Trade smarter. Complete faster. Connect with active collectors and
             finish your BGMI card collection in the Blue Lock community.
           </p>
