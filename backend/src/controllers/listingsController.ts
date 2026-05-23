@@ -36,7 +36,10 @@ export async function createListing(req: Request, res: Response, next: NextFunct
       return res.status(400).json({ message: "Invalid offering card" });
     }
 
-    const expiresAt = new Date(Date.now() + (Number(expiresInHours) || 4) * 60 * 60 * 1000);
+    // BGMI in-game trade codes are valid for ~3 days (72h). We expire listings
+    // a couple of hours earlier (70h) so a claimant always has a buffer to
+    // redeem before the in-game code dies.
+    const expiresAt = new Date(Date.now() + (Number(expiresInHours) || 70) * 60 * 60 * 1000);
     const encryptedCode = encryptText(code);
 
     const wantedDefs = await DefinedCard.find({ _id: { $in: wantedCardIds } }).lean();

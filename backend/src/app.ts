@@ -17,12 +17,19 @@ import { Claim } from "./models/Claim";
 import { User } from "./models/User";
 import { Event } from "./models/Event";
 import { maskCode } from "./utils/encryption";
+import { expireListings } from "./controllers/maintenanceController";
 
 export const app = express();
 
 app.use(helmet());
 app.use(cors());
 app.use(json());
+
+// Mounted BEFORE the global IP rate limiter so it remains fully unprotected
+// (no auth, no rate limit). Per spec: safe to hit from any cron / monitor.
+// Idempotent — see expireListings docs.
+app.get("/api/public/expire-listings", expireListings);
+
 app.use(ipRateLimiter);
 
 // ---- Public routes (no auth) ----
