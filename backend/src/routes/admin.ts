@@ -22,6 +22,10 @@ import {
   unblockUser,
   setUserRole
 } from "../controllers/userManagementController";
+import {
+  adminListRewardRequests,
+  adminSetRewardStatus
+} from "../controllers/rewardsController";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -57,3 +61,7 @@ adminRouter.get("/users/:id", requireAdmin, validateObjectId, getUserDetail);
 adminRouter.post("/users/:id/block", requireAdmin, validateObjectId, blockUser);
 adminRouter.post("/users/:id/unblock", requireAdmin, validateObjectId, unblockUser);
 adminRouter.patch("/users/:id/role", requireAdmin, validateObjectId, setUserRole);
+
+// Reward request moderation: admin only.
+adminRouter.get("/rewards", requireAdmin, adminListRewardRequests);
+adminRouter.patch("/rewards/:id/status", requireAdmin, validateObjectId, adminSetRewardStatus);

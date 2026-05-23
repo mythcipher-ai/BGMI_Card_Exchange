@@ -39,7 +39,11 @@ export const config = {
   smtpSecure: process.env.SMTP_SECURE === "true",
   smtpUser: getOptionalEnv("SMTP_USER"),
   smtpPass: getOptionalEnv("SMTP_PASS"),
-  emailFromAddress: getOptionalEnv("EMAIL_FROM_ADDRESS", "Blue Lock Exchange <no-reply@example.com>")
+  emailFromAddress: getOptionalEnv("EMAIL_FROM_ADDRESS", "Blue Lock Exchange <no-reply@gmail.com>"),
+
+  // Address that gets notified when a user submits a reward claim.
+  // Falls back to the from-address so the maintainer at least sees it.
+  adminEmail: getOptionalEnv("ADMIN_EMAIL")
 };
 
 export const giftEmailReady = Boolean(

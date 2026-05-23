@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
+import AdminRewardsTable from "@/components/AdminRewardsTable";
 import { toast } from "sonner";
 import {
   adminGetUsers,
@@ -44,6 +45,7 @@ const UserManagement = () => {
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "flagged" | "blocked">("all");
+  const [section, setSection] = useState<"users" | "rewards">("users");
 
   useEffect(() => {
     if (!authLoading && me?.role !== "admin") {
@@ -115,13 +117,18 @@ const UserManagement = () => {
     }
   };
 
+  // "Flagged" now covers both: shared-IP detections AND trade-dispute flags
+  // (lister marked the user's claim as "not received"). Either signal pulls a
+  // user into the moderation queue.
+  const isFlagged = (u: AdminUser) => u.flagged || (u.flagCount ?? 0) > 0;
+
   const filtered = users.filter((u) => {
-    if (filter === "flagged") return u.flagged;
+    if (filter === "flagged") return isFlagged(u);
     if (filter === "blocked") return u.status === "blocked";
     return true;
   });
 
-  const flaggedCount = users.filter((u) => u.flagged).length;
+  const flaggedCount = users.filter(isFlagged).length;
   const blockedCount = users.filter((u) => u.status === "blocked").length;
 
   return (
@@ -129,12 +136,47 @@ const UserManagement = () => {
       <Navbar />
       <main className="container py-4 flex-1 max-w-7xl mx-auto space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="font-heading text-xl font-bold text-foreground">User Management</h1>
+          <h1 className="font-heading text-xl font-bold text-foreground">
+            {section === "users" ? "User Management" : "Reward Claims"}
+          </h1>
           <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-destructive/20 text-destructive border border-destructive/30 rounded">
             Admin Only
           </span>
         </div>
 
+        <div role="tablist" aria-label="Admin sections" className="flex gap-1 border-b border-border">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === "users"}
+            onClick={() => setSection("users")}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+              section === "users"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Users
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === "rewards"}
+            onClick={() => setSection("rewards")}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+              section === "rewards"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Reward Claims
+          </button>
+        </div>
+
+        {section === "rewards" ? (
+          <AdminRewardsTable />
+        ) : (
+          <>
         {/* Stats bar */}
         <div className="flex gap-2 text-xs">
           <span className="px-2 py-1 rounded bg-secondary text-foreground">{users.length} total</span>
@@ -202,12 +244,21 @@ const UserManagement = () => {
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                     <span>Listed: {u.listingsCount}</span>
                     <span>Claimed: {u.claimedCount}</span>
+                    <span>Trades: {u.successfulTrades ?? 0}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  {(u.flagCount ?? 0) > 0 && (
+                    <span
+                      className="px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-destructive/15 text-destructive border border-destructive/40 rounded flex items-center gap-0.5"
+                      title={`${u.flagCount} dispute flag${u.flagCount === 1 ? "" : "s"} from listers reporting "not received"`}
+                    >
+                      <AlertTriangle size={8} /> {u.flagCount} flag{u.flagCount === 1 ? "" : "s"}
+                    </span>
+                  )}
                   {u.flagged && (
-                    <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-neon-yellow/20 text-neon-yellow rounded flex items-center gap-0.5">
-                      <AlertTriangle size={8} /> Flagged
+                    <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-neon-yellow/20 text-neon-yellow rounded flex items-center gap-0.5" title="Shared IP detected across multiple users">
+                      <AlertTriangle size={8} /> Shared IP
                     </span>
                   )}
                   {u.status === "blocked" && (
@@ -334,7 +385,9 @@ const UserManagement = () => {
                       <div className="max-h-32 overflow-y-auto space-y-1">
                         {selectedUser.listings.map((l: any) => (
                           <div key={l._id} className="flex items-center justify-between rounded bg-secondary p-2 text-xs">
-                            <span className="text-foreground">{l.offeringCard}</span>
+                            <span className="text-foreground truncate">
+                              {(l.offeringCards || []).join(", ") || "(none)"} → {l.wantedCard || "?"}
+                            </span>
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <span>{l.status}</span>
                               <Clock size={10} />
@@ -355,7 +408,9 @@ const UserManagement = () => {
                       <div className="max-h-32 overflow-y-auto space-y-1">
                         {selectedUser.claims.map((c: any) => (
                           <div key={c._id} className="flex items-center justify-between rounded bg-secondary p-2 text-xs">
-                            <span className="text-foreground">{c.listingId?.offeringCard || "Unknown"}</span>
+                            <span className="text-foreground truncate">
+                              {(c.listingId?.offeringCards || []).join(", ") || c.listingId?.wantedCard || "Unknown"}
+                            </span>
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <span className="font-mono">{c.ipAddress}</span>
                               <span>{new Date(c.createdAt).toLocaleDateString()}</span>
@@ -390,6 +445,8 @@ const UserManagement = () => {
               )}
             </div>
           </div>
+        )}
+          </>
         )}
       </main>
     </div>

@@ -96,8 +96,9 @@ export async function createGiftRequest(req: Request, res: Response, next: NextF
     }
 
     // ---- Respond immediately, send email asynchronously ----
+    const offeringLabel = (listing.offeringCards || []).join(", ") || listing.wantedCard;
     res.status(201).json({
-      data: serialize(gift, listing.offeringCard, "", user.name || "", owner.name || "")
+      data: serialize(gift, offeringLabel, "", user.name || "", owner.name || "")
     });
 
     // Fire-and-forget email send.
@@ -108,7 +109,7 @@ export async function createGiftRequest(req: Request, res: Response, next: NextF
       const result = await sendGiftRequestEmail({
         to: owner.email,
         toName: owner.name,
-        cardName: listing.offeringCard,
+        cardName: offeringLabel,
         requesterName: requesterName.trim(),
         requesterEmail: requesterEmail.trim().toLowerCase(),
         message: message.trim(),
@@ -131,23 +132,25 @@ export async function getIncomingGiftRequests(req: Request, res: Response, next:
     const user = req.user!;
     const gifts = await GiftRequest.find({ toUser: user.id })
       .sort({ createdAt: -1 })
-      .populate<{ listingId: any }>("listingId", "offeringCard offeringCardId")
+      .populate<{ listingId: any }>("listingId", "offeringCards offeringCardIds")
       .populate<{ fromUser: any }>("fromUser", "name email")
       .lean();
 
-    const cardNames = gifts.map((g) => g.listingId?.offeringCard).filter(Boolean);
-    const defs = await DefinedCard.find({ name: { $in: cardNames } }).lean();
+    const allCardNames: string[] = gifts.flatMap((g: any) => g.listingId?.offeringCards || []);
+    const defs = await DefinedCard.find({ name: { $in: allCardNames } }).lean();
     const imageMap = new Map(defs.map((d) => [d.name, d.imageUrl]));
 
-    const data = gifts.map((g: any) =>
-      serialize(
+    const data = gifts.map((g: any) => {
+      const names: string[] = g.listingId?.offeringCards || [];
+      const primary = names[0] || "";
+      return serialize(
         g,
-        g.listingId?.offeringCard,
-        imageMap.get(g.listingId?.offeringCard) ?? "",
+        names.join(", "),
+        primary ? (imageMap.get(primary) ?? "") : "",
         g.fromUser?.name || "",
         user.name || ""
-      )
-    );
+      );
+    });
     res.json({ data });
   } catch (error) {
     next(error);
@@ -159,23 +162,25 @@ export async function getOutgoingGiftRequests(req: Request, res: Response, next:
     const user = req.user!;
     const gifts = await GiftRequest.find({ fromUser: user.id })
       .sort({ createdAt: -1 })
-      .populate<{ listingId: any }>("listingId", "offeringCard")
+      .populate<{ listingId: any }>("listingId", "offeringCards")
       .populate<{ toUser: any }>("toUser", "name")
       .lean();
 
-    const cardNames = gifts.map((g) => g.listingId?.offeringCard).filter(Boolean);
-    const defs = await DefinedCard.find({ name: { $in: cardNames } }).lean();
+    const allCardNames: string[] = gifts.flatMap((g: any) => g.listingId?.offeringCards || []);
+    const defs = await DefinedCard.find({ name: { $in: allCardNames } }).lean();
     const imageMap = new Map(defs.map((d) => [d.name, d.imageUrl]));
 
-    const data = gifts.map((g: any) =>
-      serialize(
+    const data = gifts.map((g: any) => {
+      const names: string[] = g.listingId?.offeringCards || [];
+      const primary = names[0] || "";
+      return serialize(
         g,
-        g.listingId?.offeringCard,
-        imageMap.get(g.listingId?.offeringCard) ?? "",
+        names.join(", "),
+        primary ? (imageMap.get(primary) ?? "") : "",
         user.name || "",
         g.toUser?.name || ""
-      )
-    );
+      );
+    });
     res.json({ data });
   } catch (error) {
     next(error);

@@ -122,14 +122,15 @@ const GiftRequestModal = ({ card, onClose }: GiftRequestModalProps) => {
         </div>
 
         <div className="rounded-md border border-border bg-background/50 p-3 flex items-center gap-3">
-          {card.offeringCardImage ? (
-            <img src={card.offeringCardImage} alt="" className="w-14 h-10 rounded object-cover" />
+          {card.wantedCardImage ? (
+            <img src={card.wantedCardImage} alt="" className="w-14 h-10 rounded object-cover" />
           ) : (
             <div className="w-14 h-10 rounded bg-secondary" />
           )}
           <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{card.offeringCard}</p>
-            <p className="text-xs text-muted-foreground">{card.offeringCardType}</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Listing wants</p>
+            <p className="text-sm font-medium text-foreground truncate">{card.wantedCard}</p>
+            <p className="text-xs text-muted-foreground">{card.wantedCardType}</p>
           </div>
         </div>
 

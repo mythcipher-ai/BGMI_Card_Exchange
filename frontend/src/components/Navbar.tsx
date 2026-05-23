@@ -1,10 +1,18 @@
 import { Link, useLocation } from "react-router-dom";
-import { Plus, Search, Shield, Users, Loader2, KeyRound } from "lucide-react";
+import { Plus, Search, Shield, Users, Loader2, KeyRound, Trophy, X } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface NavbarProps {
   onSearch?: (query: string) => void;
+}
+
+// Smoothly scroll the home catalog into view. Called whenever the user
+// engages the search (focus or types) so the list they're filtering is
+// actually visible instead of hidden below the hero.
+function scrollToListings() {
+  const el = document.getElementById("listings");
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 const Navbar = ({ onSearch }: NavbarProps) => {
@@ -16,6 +24,13 @@ const Navbar = ({ onSearch }: NavbarProps) => {
   const isAdmin = user?.role === "admin";
   const isManager = user?.role === "manager";
   const isStaff = isAdmin || isManager;
+  const onHome = location.pathname === "/";
+
+  const handleQueryChange = (q: string) => {
+    setQuery(q);
+    onSearch?.(q);
+    if (q) scrollToListings();
+  };
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
@@ -28,23 +43,36 @@ const Navbar = ({ onSearch }: NavbarProps) => {
           BLUE LOCK · EXCHANGE
         </Link>
 
-        {location.pathname === "/" && (
+        {onHome && (
           <div className="hidden sm:flex flex-1 max-w-xs">
-            <input
-              type="text"
-              placeholder="Search by card name or type..."
-              value={query}
-              onChange={(e) => { setQuery(e.target.value); onSearch?.(e.target.value); }}
-              className="w-full rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+            <div className="relative w-full">
+              <Search
+                size={14}
+                aria-hidden="true"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
+              <input
+                type="text"
+                placeholder="Search by card name or type..."
+                value={query}
+                onChange={(e) => handleQueryChange(e.target.value)}
+                onFocus={scrollToListings}
+                aria-label="Search cards"
+                className="w-full rounded-md border border-border bg-secondary pl-8 pr-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
           </div>
         )}
 
         <div className="flex items-center gap-1.5">
-          {location.pathname === "/" && (
+          {onHome && (
             <button
               type="button"
-              onClick={() => setSearchOpen(!searchOpen)}
+              onClick={() => {
+                const next = !searchOpen;
+                setSearchOpen(next);
+                if (next) scrollToListings();
+              }}
               aria-label={searchOpen ? "Close search" : "Open search"}
               aria-expanded={searchOpen}
               className="sm:hidden p-2 rounded-md text-muted-foreground hover:text-foreground focus-visible:text-foreground"
@@ -57,15 +85,25 @@ const Navbar = ({ onSearch }: NavbarProps) => {
             <Loader2 size={18} className="animate-spin text-muted-foreground mx-2" />
           ) : isAuthenticated ? (
             <>
-              {/* Standard player: List Card. Profile and Logout are reached via bottom nav / profile page. */}
+              {/* Standard player: List Card + Rewards. Profile and Logout are reached via bottom nav / profile page. */}
               {!isStaff && (
-                <Link
-                  to="/add"
-                  className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  <Plus size={14} aria-hidden="true" />
-                  <span className="hidden sm:inline">List Card</span>
-                </Link>
+                <>
+                  <Link
+                    to="/rewards"
+                    className="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                    title="Reward milestones"
+                  >
+                    <Trophy size={14} aria-hidden="true" />
+                    Rewards
+                  </Link>
+                  <Link
+                    to="/add"
+                    className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                    <span className="hidden sm:inline">List Card</span>
+                  </Link>
+                </>
               )}
 
               {/* Manager and Admin both see Cards. */}
@@ -106,16 +144,34 @@ const Navbar = ({ onSearch }: NavbarProps) => {
         </div>
       </div>
 
-      {searchOpen && location.pathname === "/" && (
+      {searchOpen && onHome && (
         <div className="sm:hidden border-t border-border px-4 py-2">
-          <input
-            type="text"
-            placeholder="Search by card name or type..."
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); onSearch?.(e.target.value); }}
-            className="w-full rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            autoFocus
-          />
+          <div className="relative">
+            <Search
+              size={14}
+              aria-hidden="true"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+            />
+            <input
+              type="text"
+              placeholder="Search by card name or type..."
+              value={query}
+              onChange={(e) => handleQueryChange(e.target.value)}
+              onFocus={scrollToListings}
+              className="w-full rounded-md border border-border bg-secondary pl-8 pr-8 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              autoFocus
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => handleQueryChange("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
       )}
     </nav>

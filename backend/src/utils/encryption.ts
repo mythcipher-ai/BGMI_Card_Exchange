@@ -51,3 +51,14 @@ export function maskCode(code: string): string {
   }
   return "****-****";
 }
+
+/**
+ * Deterministic HMAC-SHA256 of a trade code, used purely for duplicate
+ * detection. Same plaintext always yields the same digest, so we can index
+ * and query it — unlike `encryptText` which uses a random IV each call.
+ *
+ * Never reveal this digest to clients; treat it like the plaintext.
+ */
+export function hashCode(plainText: string): string {
+  return crypto.createHmac("sha256", key).update(plainText, "utf8").digest("hex");
+}

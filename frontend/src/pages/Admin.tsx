@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
 import {
-  fetchDefinedCards,
+  adminFetchAllCards,
   adminCreateCard,
   adminDeleteCard,
   adminUploadImage,
@@ -85,7 +85,7 @@ const Admin = () => {
     try {
       const [evRes, cdRes] = await Promise.all([
         adminGetEvents(),
-        fetchDefinedCards()
+        adminFetchAllCards()
       ]);
       setEvents(evRes.data);
       setCards(cdRes.data);
@@ -429,7 +429,7 @@ const Admin = () => {
                         className="block w-full text-left"
                         aria-label={`Open event ${ev.name}`}
                       >
-                        <div className="aspect-[16/9] w-full bg-secondary overflow-hidden">
+                        <div className="aspect-[9/9] w-full bg-secondary overflow-hidden">
                           <img
                             src={ev.imageUrl}
                             alt={ev.name}

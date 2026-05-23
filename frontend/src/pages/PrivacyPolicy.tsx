@@ -3,7 +3,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BottomNav from "@/components/BottomNav";
 
-const CONTACT_EMAIL = "26furqan.ansari@gmail.com";
+const CONTACT_EMAIL = "mythcipher.ai@gmail.com";
 
 const PrivacyPolicy = () => {
   return (

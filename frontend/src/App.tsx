@@ -16,6 +16,8 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Terms from "./pages/Terms";
 import About from "./pages/About";
 import UserGuide from "./pages/UserGuide";
+import Rewards from "./pages/Rewards";
+import EventBrowse from "./pages/EventBrowse";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +43,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/add" element={<AddCard />} />
+              <Route path="/event/:id" element={<EventBrowse />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/users" element={<UserManagement />} />
               <Route path="/login" element={<Login />} />
@@ -49,6 +52,7 @@ const App = () => (
               <Route path="/terms" element={<Terms />} />
               <Route path="/about" element={<About />} />
               <Route path="/guide" element={<UserGuide />} />
+              <Route path="/rewards" element={<Rewards />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

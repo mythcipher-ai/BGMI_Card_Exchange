@@ -3,21 +3,30 @@ import { CardListing } from "../models/CardListing";
 import { Claim } from "../models/Claim";
 import { DefinedCard } from "../models/DefinedCard";
 import { User } from "../models/User";
-import { encryptText, maskCode } from "../utils/encryption";
+import { encryptText, hashCode, maskCode } from "../utils/encryption";
+import { sendTradeConfirmedToClaimer, sendTradeDisputedToClaimer } from "../utils/email";
 
 export async function createListing(req: Request, res: Response, next: NextFunction) {
   try {
     const user = req.user;
     if (!user) return res.status(401).json({ message: "Authentication required" });
 
-    const { offeringCardId, wantedCardIds, code, expiresInHours } = req.body;
+    const { offeringCardIds, wantedCardId, code, expiresInHours } = req.body ?? {};
 
-    if (!offeringCardId || !Array.isArray(wantedCardIds) || wantedCardIds.length === 0 || wantedCardIds.length > 3 || !code) {
+    if (
+      !Array.isArray(offeringCardIds) ||
+      offeringCardIds.length === 0 ||
+      offeringCardIds.length > 3 ||
+      !wantedCardId ||
+      typeof wantedCardId !== "string" ||
+      !code
+    ) {
       return res.status(400).json({ message: "Invalid listing payload" });
     }
 
-    if (!/^\d+$/.test(code)) {
-      return res.status(400).json({ message: "Code must contain only numbers" });
+    // BGMI in-game trade codes are exactly 8 digits. Enforced both sides.
+    if (!/^\d{8}$/.test(code)) {
+      return res.status(400).json({ message: "Code must be exactly 8 digits" });
     }
 
     // ---- One-active-listing-per-user pre-check ----
@@ -31,9 +40,39 @@ export async function createListing(req: Request, res: Response, next: NextFunct
       });
     }
 
-    const offeringDef = await DefinedCard.findById(offeringCardId);
-    if (!offeringDef) {
-      return res.status(400).json({ message: "Invalid offering card" });
+    // ---- Duplicate-code checks ----
+    // Use a deterministic hash so we can index/query without storing plaintext.
+    const codeHash = hashCode(code);
+
+    // (a) The same code is currently active on the platform under any user.
+    const activeDuplicate = await CardListing.findOne({ codeHash, status: "active" }).lean();
+    if (activeDuplicate) {
+      return res.status(409).json({
+        code: "CODE_IN_USE",
+        message: "This trade code is already active on the platform. Generate a fresh one in-game."
+      });
+    }
+
+    // (b) The same user has listed this exact code before (even if expired/claimed).
+    const historicDuplicate = await CardListing.findOne({ codeHash, createdBy: user.id }).lean();
+    if (historicDuplicate) {
+      return res.status(409).json({
+        code: "CODE_ALREADY_USED",
+        message: "You have already listed this code before. Generate a new code from BGMI."
+      });
+    }
+
+    // Resolve all offering cards + the wanted card to their canonical names.
+    const offeringDefs = await DefinedCard.find({ _id: { $in: offeringCardIds } }).lean();
+    if (offeringDefs.length !== offeringCardIds.length) {
+      return res.status(400).json({ message: "Invalid offering card(s)" });
+    }
+    const wantedDef = await DefinedCard.findById(wantedCardId).lean();
+    if (!wantedDef) {
+      return res.status(400).json({ message: "Invalid wanted card" });
+    }
+    if (offeringDefs.some((d) => d._id.toString() === wantedDef._id.toString())) {
+      return res.status(400).json({ message: "Wanted card cannot be one of your offered cards" });
     }
 
     // BGMI in-game trade codes are valid for ~3 days (72h). We expire listings
@@ -42,23 +81,21 @@ export async function createListing(req: Request, res: Response, next: NextFunct
     const expiresAt = new Date(Date.now() + (Number(expiresInHours) || 70) * 60 * 60 * 1000);
     const encryptedCode = encryptText(code);
 
-    const wantedDefs = await DefinedCard.find({ _id: { $in: wantedCardIds } }).lean();
-    const wantedNames = wantedDefs.map((d) => d.name);
+    const offeringNames = offeringDefs.map((d) => d.name);
 
     let listing;
     try {
       listing = await CardListing.create({
         createdBy: user.id,
-        offeringCard: offeringDef.name,
-        offeringCardId: offeringCardId,
-        offeringCount: 1,
-        wantedCards: wantedNames,
-        wantedCardIds: wantedCardIds,
+        offeringCards: offeringNames,
+        offeringCardIds,
+        wantedCard: wantedDef.name,
+        wantedCardId,
         code: encryptedCode,
+        codeHash,
         expiresAt
       });
     } catch (err: any) {
-      // Race: another request created an active listing between the check and the write.
       if (err?.code === 11000) {
         return res.status(409).json({
           code: "ACTIVE_LISTING_EXISTS",
@@ -68,14 +105,15 @@ export async function createListing(req: Request, res: Response, next: NextFunct
       throw err;
     }
 
-    // Update the user's denormalized flag (used by frontend eligibility & UI gating).
     await User.findByIdAndUpdate(user.id, { $set: { hasActiveListing: true } });
-    await DefinedCard.findByIdAndUpdate(offeringCardId, { $inc: { totalCount: 1 } });
+    // Bump totalCount on every offered DefinedCard (one listing makes each of
+    // its offered cards available to the catalog).
+    await DefinedCard.updateMany({ _id: { $in: offeringCardIds } }, { $inc: { totalCount: 1 } });
 
     res.status(201).json({
       id: listing.id,
-      offeringCard: listing.offeringCard,
-      wantedCards: listing.wantedCards,
+      offeringCards: listing.offeringCards,
+      wantedCard: listing.wantedCard,
       status: listing.status,
       expiresAt: listing.expiresAt,
       createdAt: listing.createdAt
@@ -92,8 +130,8 @@ export async function getListings(req: Request, res: Response, next: NextFunctio
 
     if (search) {
       query.$or = [
-        { offeringCard: { $regex: String(search), $options: "i" } },
-        { wantedCards: { $regex: String(search), $options: "i" } }
+        { offeringCards: { $regex: String(search), $options: "i" } },
+        { wantedCard: { $regex: String(search), $options: "i" } }
       ];
     }
 
@@ -113,24 +151,23 @@ export async function getListings(req: Request, res: Response, next: NextFunctio
 
     const payload = listings
       .map((listing: any) => {
-        const offeringDef = cardMap.get(listing.offeringCard);
         return {
           id: listing._id,
-          offeringCard: listing.offeringCard,
-          offeringCardImage: offeringDef?.imageUrl ?? "",
-          offeringCardType: offeringDef?.type ?? "",
-          offeringCount: listing.offeringCount ?? 1,
-          wantedCards: listing.wantedCards,
-          wantedCardImages: listing.wantedCards.map((name: string) => ({
+          offeringCards: listing.offeringCards,
+          offeringCardImages: (listing.offeringCards || []).map((name: string) => ({
             name,
             imageUrl: cardMap.get(name)?.imageUrl ?? "",
             type: cardMap.get(name)?.type ?? ""
           })),
+          wantedCard: listing.wantedCard,
+          wantedCardImage: cardMap.get(listing.wantedCard)?.imageUrl ?? "",
+          wantedCardType: cardMap.get(listing.wantedCard)?.type ?? "",
           status: listing.status,
           expiresAt: listing.expiresAt,
           createdAt: listing.createdAt,
           claimCount: listing.claimCount,
           reports: listing.reports,
+          createdById: listing.createdBy?._id?.toString() ?? null,
           trustScore: listing.createdBy?.trustScore ?? 0,
           maskedCode: maskCode("0000-0000-0000-0000")
         };
@@ -167,34 +204,147 @@ export async function getMyListings(req: Request, res: Response, next: NextFunct
     }
 
     const payload = listings.map((listing: any) => {
-      const offeringDef = cardMap.get(listing.offeringCard);
       const claim = claimMap.get(listing._id.toString());
       const claimer = claim?.claimedBy;
 
       return {
         id: listing._id,
-        offeringCard: listing.offeringCard,
-        offeringCardImage: offeringDef?.imageUrl ?? "",
-        offeringCardType: offeringDef?.type ?? "",
-        wantedCards: listing.wantedCards,
-        wantedCardImages: listing.wantedCards.map((name: string) => ({
+        offeringCards: listing.offeringCards || [],
+        offeringCardImages: (listing.offeringCards || []).map((name: string) => ({
           name,
           imageUrl: cardMap.get(name)?.imageUrl ?? "",
           type: cardMap.get(name)?.type ?? ""
         })),
+        wantedCard: listing.wantedCard,
+        wantedCardImage: cardMap.get(listing.wantedCard)?.imageUrl ?? "",
+        wantedCardType: cardMap.get(listing.wantedCard)?.type ?? "",
         status: listing.status,
         expiresAt: listing.expiresAt,
         createdAt: listing.createdAt,
         claimCount: listing.claimCount,
+        tradeOutcome: listing.tradeOutcome ?? null,
+        outcomeAt: listing.outcomeAt ?? null,
+        disputeReason: listing.disputeReason ?? null,
         claimedBy: claimer ? {
           name: claimer.name || claimer.email?.split("@")[0] || "User",
           email: claimer.email,
         } : null,
-        claimedAt: claim?.createdAt ?? null,
+        claimedAt: claim?.createdAt ?? listing.claimedAt ?? null,
       };
     });
 
     res.json({ data: payload });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Owner confirms they received the wanted card in-game from the claimer.
+// This is THE point where successfulTrades increments for milestone rewards.
+export async function confirmTradeReceived(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: "Authentication required" });
+
+    const listingId = req.params.id;
+    const listing = await CardListing.findOneAndUpdate(
+      {
+        _id: listingId,
+        createdBy: user.id,
+        status: "claimed",
+        tradeOutcome: "pending"
+      },
+      { $set: { tradeOutcome: "confirmed", outcomeAt: new Date() } },
+      { new: true }
+    );
+    if (!listing) {
+      return res.status(404).json({
+        message: "Listing not found, not yours, or no longer awaiting confirmation"
+      });
+    }
+
+    await User.findByIdAndUpdate(user.id, { $inc: { successfulTrades: 1 } });
+
+    if (listing.claimedBy) {
+      User.findById(listing.claimedBy).select("email name").lean().then((claimer: any) => {
+        if (claimer?.email) {
+          sendTradeConfirmedToClaimer({
+            to: claimer.email,
+            toName: claimer.name,
+            offeringCard: (listing.offeringCards || []).join(", ") || listing.wantedCard
+          }).catch(() => { /* silent */ });
+        }
+      }).catch(() => { /* silent */ });
+    }
+
+    res.json({
+      id: listing.id,
+      tradeOutcome: listing.tradeOutcome,
+      outcomeAt: listing.outcomeAt
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Owner reports the trade didn't go through. Claimer gets flagged; admin can
+// review the flagCount in user management and decide to suspend.
+export async function disputeTrade(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: "Authentication required" });
+
+    const listingId = req.params.id;
+    const rawReason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    const reason = rawReason ? rawReason.slice(0, 400) : undefined;
+
+    const listing = await CardListing.findOneAndUpdate(
+      {
+        _id: listingId,
+        createdBy: user.id,
+        status: "claimed",
+        tradeOutcome: "pending"
+      },
+      {
+        $set: {
+          tradeOutcome: "disputed",
+          outcomeAt: new Date(),
+          ...(reason ? { disputeReason: reason } : {})
+        }
+      },
+      { new: true }
+    );
+    if (!listing) {
+      return res.status(404).json({
+        message: "Listing not found, not yours, or no longer awaiting confirmation"
+      });
+    }
+
+    let newFlagCount = 0;
+    if (listing.claimedBy) {
+      const claimer = await User.findByIdAndUpdate(
+        listing.claimedBy,
+        { $inc: { flagCount: 1 } },
+        { new: true, select: "email name flagCount" }
+      ).lean<{ email?: string; name?: string; flagCount?: number }>();
+      newFlagCount = claimer?.flagCount ?? 0;
+      if (claimer?.email) {
+        sendTradeDisputedToClaimer({
+          to: claimer.email,
+          toName: claimer.name,
+          offeringCard: (listing.offeringCards || []).join(", ") || listing.wantedCard,
+          reason,
+          flagCount: newFlagCount
+        }).catch(() => { /* silent */ });
+      }
+    }
+
+    res.json({
+      id: listing.id,
+      tradeOutcome: listing.tradeOutcome,
+      outcomeAt: listing.outcomeAt,
+      claimerFlagCount: newFlagCount
+    });
   } catch (error) {
     next(error);
   }
@@ -212,13 +362,12 @@ export async function deleteListing(req: Request, res: Response, next: NextFunct
 
     const wasActive = listing.status === "active";
 
-    if (listing.offeringCardId) {
-      await DefinedCard.findByIdAndUpdate(listing.offeringCardId, { $inc: { totalCount: -1 } });
+    if (listing.offeringCardIds && listing.offeringCardIds.length > 0) {
+      await DefinedCard.updateMany({ _id: { $in: listing.offeringCardIds } }, { $inc: { totalCount: -1 } });
     }
 
     await listing.deleteOne();
 
-    // If the deleted listing was the user's active one, free their slot.
     if (wasActive) {
       const stillActive = await CardListing.exists({ createdBy: user!.id, status: "active" });
       if (!stillActive) {

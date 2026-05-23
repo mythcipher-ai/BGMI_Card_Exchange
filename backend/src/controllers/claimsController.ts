@@ -4,6 +4,7 @@ import { Claim } from "../models/Claim";
 import { User } from "../models/User";
 import { decryptText } from "../utils/encryption";
 import { config } from "../config";
+import { sendClaimNotifyOwner } from "../utils/email";
 
 function getNextMidnight(): Date {
   const next = new Date();
@@ -45,7 +46,15 @@ export async function createClaim(req: Request, res: Response, next: NextFunctio
         expiresAt: { $gt: now },
         createdBy: { $ne: user.id }
       },
-      { $set: { status: "claimed" }, $inc: { claimCount: 1 } },
+      {
+        $set: {
+          status: "claimed",
+          tradeOutcome: "pending",
+          claimedBy: user.id,
+          claimedAt: now
+        },
+        $inc: { claimCount: 1 }
+      },
       { new: true }
     );
 
@@ -72,8 +81,23 @@ export async function createClaim(req: Request, res: Response, next: NextFunctio
     user.dailyClaims += 1;
     await user.save();
 
-    // Free the listing owner's slot — the listing is now "claimed", no longer "active".
+    // Free the owner's active-listing slot. successfulTrades is NOT bumped
+    // here anymore — it only ticks up when the owner confirms receipt via
+    // POST /api/listings/:id/confirm-received. See listingsController.
     await User.findByIdAndUpdate(listing.createdBy, { $set: { hasActiveListing: false } });
+
+    // Fire-and-forget owner notification asking them to confirm the trade.
+    User.findById(listing.createdBy).select("email name").lean().then((owner: any) => {
+      if (owner?.email) {
+        sendClaimNotifyOwner({
+          to: owner.email,
+          toName: owner.name,
+          // Mention every card they were offering (the buyer picks one in-game).
+          offeringCard: (listing.offeringCards || []).join(", ") || listing.wantedCard,
+          claimerName: user.name || user.email
+        }).catch(() => { /* silent */ });
+      }
+    }).catch(() => { /* silent */ });
 
     res.json({
       listingId: listing.id,

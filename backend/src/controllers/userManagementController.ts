@@ -47,14 +47,19 @@ export async function getAllUsers(_req: Request, res: Response, next: NextFuncti
       }
     }
 
-    const payload = users.map((u) => {
+    const payload = users.map((u: any) => {
       const uid = u._id.toString();
       return {
         ...u,
         listingsCount: listingsCount.get(uid) || 0,
         claimedCount: claimedCount.get(uid) || 0,
+        // IP-collision flag (legacy shared-IP detection)
         flagged: flaggedUsers.has(uid),
-        sharedIps: userSharedIps.get(uid) || []
+        sharedIps: userSharedIps.get(uid) || [],
+        // Trade-dispute flag count: number of times a lister marked a trade by
+        // this user as "not received". Used by admin for suspension decisions.
+        flagCount: u.flagCount ?? 0,
+        successfulTrades: u.successfulTrades ?? 0
       };
     });
 
@@ -75,7 +80,7 @@ export async function getUserDetail(req: Request, res: Response, next: NextFunct
       .lean();
 
     const claims = await Claim.find({ claimedBy: id })
-      .populate("listingId", "offeringCard wantedCards")
+      .populate("listingId", "offeringCards wantedCard")
       .sort({ createdAt: -1 })
       .lean();
 

@@ -3,10 +3,16 @@ import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
 import ProfileStats from "@/components/ProfileStats";
 import GiftRequestList from "@/components/GiftRequestList";
-import { Trash2, Loader2, CheckCircle, Clock, LogOut, Hourglass } from "lucide-react";
+import { Trash2, Loader2, CheckCircle, Clock, LogOut, Hourglass, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
 import { expiresIn, EXPIRY_TONE_CLASS } from "@/lib/time";
 import { toast } from "sonner";
-import { fetchMyListings, deleteListing, type MyListing } from "@/lib/api";
+import {
+  fetchMyListings,
+  deleteListing,
+  confirmTradeReceived,
+  disputeTrade,
+  type MyListing
+} from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -31,6 +37,7 @@ const Profile = () => {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [myListings, setMyListings] = useState<MyListing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [outcomeBusyId, setOutcomeBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -53,6 +60,42 @@ const Profile = () => {
       refreshUser();
     } catch (err: any) {
       toast.error(err.message || "Failed to delete");
+    }
+  };
+
+  const handleConfirm = async (id: string) => {
+    setOutcomeBusyId(id);
+    try {
+      const res = await confirmTradeReceived(id);
+      toast.success("Trade confirmed — counted toward your milestone rewards.");
+      setMyListings((prev) => prev.map((l) =>
+        l.id === id ? { ...l, tradeOutcome: res.tradeOutcome, outcomeAt: res.outcomeAt } : l
+      ));
+      refreshUser();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to confirm trade");
+    } finally {
+      setOutcomeBusyId(null);
+    }
+  };
+
+  const handleDispute = async (id: string) => {
+    const reasonInput = window.prompt(
+      "Why are you reporting this trade as not received? (optional, helps admin review)"
+    );
+    if (reasonInput === null) return;
+    const reason = reasonInput.trim() || undefined;
+    setOutcomeBusyId(id);
+    try {
+      const res = await disputeTrade(id, reason);
+      toast.success("Trade marked as not received — the claimer has been flagged.");
+      setMyListings((prev) => prev.map((l) =>
+        l.id === id ? { ...l, tradeOutcome: res.tradeOutcome, outcomeAt: res.outcomeAt, disputeReason: reason ?? null } : l
+      ));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to dispute trade");
+    } finally {
+      setOutcomeBusyId(null);
     }
   };
 
@@ -142,22 +185,26 @@ const Profile = () => {
               ) : (
                 activeListings.map((listing) => {
                   const expiry = expiresIn(listing.expiresAt);
+                  const offeringLabel = listing.offeringCards.join(", ");
+                  // Cover image: prefer the wanted card (most informative — that's
+                  // what the lister is hunting). Fall back to the first offered card.
+                  const cover = listing.wantedCardImage || listing.offeringCardImages[0]?.imageUrl;
                   return (
                     <div key={listing.id} className="rounded-md border border-border bg-card p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-3 min-w-0">
-                          {listing.offeringCardImage && (
-                            <img src={listing.offeringCardImage} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
+                          {cover && (
+                            <img src={cover} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
                           )}
                           <div className="min-w-0">
-                            <p className="text-sm text-foreground truncate">{listing.offeringCard}</p>
-                            <p className="text-xs text-muted-foreground">Wants: {listing.wantedCards[0]}</p>
+                            <p className="text-sm text-foreground truncate">Wants: {listing.wantedCard}</p>
+                            <p className="text-xs text-muted-foreground truncate">Offers: {offeringLabel}</p>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => handleDelete(listing.id)}
-                          aria-label={`Delete listing ${listing.offeringCard}`}
+                          aria-label={`Delete listing wanting ${listing.wantedCard}`}
                           className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors shrink-0"
                         >
                           <Trash2 size={14} aria-hidden="true" />
@@ -183,28 +230,68 @@ const Profile = () => {
               {claimedListings.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-4 text-center">No claimed listings yet</p>
               ) : (
-                claimedListings.map((listing) => (
-                  <div key={listing.id} className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-1.5">
-                    <div className="flex items-center gap-3">
-                      {listing.offeringCardImage && (
-                        <img src={listing.offeringCardImage} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
+                claimedListings.map((listing) => {
+                  const outcome = listing.tradeOutcome;
+                  const busy = outcomeBusyId === listing.id;
+                  const offeringLabel = listing.offeringCards.join(", ");
+                  const cover = listing.wantedCardImage || listing.offeringCardImages[0]?.imageUrl;
+                  return (
+                    <div key={listing.id} className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
+                      <div className="flex items-center gap-3">
+                        {cover && (
+                          <img src={cover} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground truncate">Wanted: {listing.wantedCard}</p>
+                          <p className="text-xs text-muted-foreground truncate">Offered: {offeringLabel}</p>
+                        </div>
+                        <OutcomeBadge outcome={outcome} />
+                      </div>
+
+                      {listing.claimedBy && (
+                        <div className="text-xs text-muted-foreground">
+                          Claimed by <span className="text-foreground font-medium">{listing.claimedBy.name}</span>
+                          {listing.claimedAt && <span> · {timeAgo(listing.claimedAt)}</span>}
+                        </div>
                       )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground truncate">{listing.offeringCard}</p>
-                        <p className="text-xs text-muted-foreground">Wanted: {listing.wantedCards[0]}</p>
-                      </div>
-                      <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-primary/20 text-primary rounded flex items-center gap-1 shrink-0">
-                        <CheckCircle size={10} aria-hidden="true" /> Claimed
-                      </span>
+
+                      {outcome === "pending" && (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] text-amber-300/90 flex items-start gap-1">
+                            <AlertTriangle size={11} className="mt-0.5 shrink-0" aria-hidden="true" />
+                            Check BGMI for your wanted card. Did you receive it in-game?
+                          </p>
+                          <div className="flex gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleConfirm(listing.id)}
+                              disabled={busy}
+                              className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 px-2.5 py-1 text-[11px] font-semibold hover:bg-emerald-500/30 disabled:opacity-50"
+                            >
+                              {busy ? <Loader2 size={11} className="animate-spin" aria-hidden="true" /> : <ShieldCheck size={11} aria-hidden="true" />}
+                              Received
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDispute(listing.id)}
+                              disabled={busy}
+                              className="inline-flex items-center gap-1 rounded-md bg-destructive/15 border border-destructive/40 text-destructive px-2.5 py-1 text-[11px] font-semibold hover:bg-destructive/25 disabled:opacity-50"
+                            >
+                              <ShieldAlert size={11} aria-hidden="true" />
+                              Not received
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {outcome === "disputed" && listing.disputeReason && (
+                        <p className="text-[11px] text-destructive">
+                          Reason: <span className="text-foreground">{listing.disputeReason}</span>
+                        </p>
+                      )}
                     </div>
-                    {listing.claimedBy && (
-                      <div className="text-xs text-muted-foreground">
-                        Claimed by <span className="text-foreground font-medium">{listing.claimedBy.name}</span>
-                        {listing.claimedAt && <span> · {timeAgo(listing.claimedAt)}</span>}
-                      </div>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </section>
           </>
@@ -226,6 +313,35 @@ const Profile = () => {
       </main>
       <BottomNav />
     </div>
+  );
+};
+
+const OutcomeBadge = ({ outcome }: { outcome: MyListing["tradeOutcome"] }) => {
+  if (outcome === "confirmed") {
+    return (
+      <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 rounded flex items-center gap-1 shrink-0">
+        <ShieldCheck size={10} aria-hidden="true" /> Received
+      </span>
+    );
+  }
+  if (outcome === "disputed") {
+    return (
+      <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-destructive/15 text-destructive border border-destructive/40 rounded flex items-center gap-1 shrink-0">
+        <ShieldAlert size={10} aria-hidden="true" /> Disputed
+      </span>
+    );
+  }
+  if (outcome === "pending") {
+    return (
+      <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-amber-400/15 text-amber-300 border border-amber-400/40 rounded flex items-center gap-1 shrink-0">
+        <Hourglass size={10} aria-hidden="true" /> Awaiting
+      </span>
+    );
+  }
+  return (
+    <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-primary/20 text-primary rounded flex items-center gap-1 shrink-0">
+      <CheckCircle size={10} aria-hidden="true" /> Claimed
+    </span>
   );
 };
 

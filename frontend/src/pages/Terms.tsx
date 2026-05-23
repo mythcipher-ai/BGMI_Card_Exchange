@@ -94,7 +94,7 @@ const Terms = () => {
 
         <Section title="11. Contact">
           For takedown requests by rights holders, account deletion, or any other
-          inquiry, contact: <a className="text-primary hover:underline" href="mailto:26furqan.ansari@gmail.com">26furqan.ansari@gmail.com</a>.
+          inquiry, contact: <a className="text-primary hover:underline" href="mailto:mythcipher.ai@gmail.com">mythcipher.ai@gmail.com</a>.
           We respond in good faith and will honor reasonable takedown requests for
           any third-party IP we have inadvertently used.
         </Section>

@@ -15,7 +15,7 @@ const LinkedInIcon = () => (
 
 // TODO: Replace with the real community Instagram URL when ready.
 const COMMUNITY_INSTAGRAM = "https://www.instagram.com/furqan_.26";
-const CONTACT_EMAIL = "26furqan.ansari@gmail.com";
+const CONTACT_EMAIL = "mythcipher.ai@gmail.com";
 
 const Footer = () => {
   return (

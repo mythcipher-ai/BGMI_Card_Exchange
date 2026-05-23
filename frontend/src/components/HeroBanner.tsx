@@ -32,7 +32,7 @@ const HeroBanner = () => {
   const activeListings = stats?.activeListings;
 
   return (
-    <section className="relative overflow-hidden">
+    <section className="relative overflow-hidden h-screen sm:h-auto">
       {/* Desktop background */}
       <div className="absolute inset-0 hidden md:block" aria-hidden="true">
         <img
@@ -52,7 +52,8 @@ const HeroBanner = () => {
           className="h-full w-full object-cover"
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/40
+         via-background/70 to-background" />
       </div>
 
       {/* Blue Lock accent overlays sit above the image so the brand still reads. */}
@@ -61,56 +62,73 @@ const HeroBanner = () => {
         aria-hidden="true"
       />
 
-      <div className="container relative h-screen py-20 sm:py-24 lg:py-28 text-center space-y-6">
-        <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 backdrop-blur px-3 py-1 text-[10px] uppercase tracking-[0.25em] text-accent">
+      {/*
+        Layout strategy:
+          • Mobile  -> flex-column the full viewport. Title sits in flex-1
+            (vertically centered). CTAs + stats live in a second block that
+            naturally lands at the bottom of the viewport (above the fixed
+            bottom-nav — pb-20 clears it).
+          • Desktop -> normal stacked layout, no flex acrobatics.
+      */}
+      <div className="container h-screen relative  flex flex-col py-6 pb-20 sm:py-24 lg:py-28 text-center">
+        {/* Badge: desktop only. */}
+        <div className="hidden sm:inline-flex self-center items-center gap-2 rounded-full border border-accent/40 bg-accent/10 backdrop-blur px-3 py-1 text-[10px] uppercase tracking-[0.25em] text-accent mb-6">
           <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
           Fan Community · Blue Lock Edition
         </div>
 
-        <h1 className="font-heading text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.05] drop-shadow-lg">
-          Find Your Missing
-          <br />
-          <span className="text-primary glow-text-blue">BLUE LOCK</span>{" "}
-          <span className="text-foreground">Cards</span>
-        </h1>
+        {/* Title wrapper. On mobile, flex-1 lets the title vertically center
+            in the available space and pushes the bottom block down. */}
+        <div className="pt-40 pb-32 md:pt-0 md:pb-0 sm:flex-none flex flex-col items-center justify-center">
+          <h1 className="font-heading text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.05] drop-shadow-lg">
+            Find Your Missing
+            <br />
+            <span className="text-primary glow-text-blue">BLUE LOCK</span>{" "}
+            <span className="text-foreground">Cards</span>
+          </h1>
 
-        <p className="text-sm sm:text-base text-foreground/85 max-w-xl mx-auto leading-relaxed drop-shadow">
-          Trade smarter. Complete faster. Connect with active collectors and
-          finish your BGMI card collection in the Blue Lock community.
-        </p>
-
-        <div className="flex sm:flex-row items-center justify-center gap-3 pt-2">
-          <a
-            href="#listings"
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors w-full sm:w-auto glow-blue"
-          >
-            Browse Listings
-            <ArrowRight size={16} aria-hidden="true" className="hidden md:block" />
-          </a>
-          {isStaff ? (
-            <Link
-              to="/admin"
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background/40 backdrop-blur px-5 py-2.5 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-primary/10 transition-colors w-full sm:w-auto"
-            >
-              <Shield size={16} aria-hidden="true" />
-              Add New Card
-            </Link>
-          ) : (
-            <Link
-              to="/add"
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background/40 backdrop-blur px-5 py-2.5 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-primary/10 transition-colors w-full sm:w-auto"
-            >
-              <Plus size={16} aria-hidden="true" />
-              List Your Card
-            </Link>
-          )}
+          {/* Description: desktop only. */}
+          <p className="hidden sm:block text-sm sm:text-base text-foreground/85 max-w-xl mx-auto leading-relaxed drop-shadow mt-6">
+            Trade smarter. Complete faster. Connect with active collectors and
+            finish your BGMI card collection in the Blue Lock community.
+          </p>
         </div>
 
-        <dl className="grid grid-cols-3 max-w-md mx-auto gap-3 pt-6 text-center">
-          <Stat label="Active Traders" value={activeTraders} />
-          <Stat label="Live Listings" value={activeListings} />
-          <Stat label="Cards Exchanged" value={totalTrades} />
-        </dl>
+        {/* CTA + Stats block — bottom of viewport on mobile, normal flow on desktop. */}
+        <div className="space-y-4 sm:space-y-6 sm:pt-6">
+          <div className="flex sm:flex-row items-center justify-center gap-3">
+            <a
+              href="#listings"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors w-full sm:w-auto glow-blue"
+            >
+              Browse Listings
+              <ArrowRight size={16} aria-hidden="true" className="hidden md:block" />
+            </a>
+            {isStaff ? (
+              <Link
+                to="/admin"
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background/40 backdrop-blur px-5 py-2.5 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-primary/10 transition-colors w-full sm:w-auto"
+              >
+                <Shield size={16} aria-hidden="true" />
+                Add New Card
+              </Link>
+            ) : (
+              <Link
+                to="/add"
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background/40 backdrop-blur px-5 py-2.5 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-primary/10 transition-colors w-full sm:w-auto"
+              >
+                <Plus size={16} aria-hidden="true" />
+                List Your Card
+              </Link>
+            )}
+          </div>
+
+          <dl className="grid grid-cols-3 max-w-md mx-auto gap-3 text-center">
+            <Stat label="Active Traders" value={activeTraders} />
+            <Stat label="Cards Exchanged" value={totalTrades} />
+            <Stat label="Live Listings" value={activeListings} />
+          </dl>
+        </div>
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />

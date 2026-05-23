@@ -19,9 +19,11 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
       trustScore: user.trustScore,
       totalClaims: user.totalClaims,
       successfulClaims: user.successfulClaims,
+      successfulTrades: user.successfulTrades ?? 0,
       reportsCount: user.reportsCount,
       dailyClaims: user.dailyClaims,
       instagramHandle: user.instagramHandle,
+      bgmiUid: user.bgmiUid,
       hasActiveListing: user.hasActiveListing ?? false,
       createdAt: user.createdAt
     });

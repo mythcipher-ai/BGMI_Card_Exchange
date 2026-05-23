@@ -55,15 +55,27 @@ const ClaimModal = ({ card, onClose, onClaimed }: ClaimModalProps) => {
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm text-foreground">{card.offeringCard}</p>
-          <p className="text-xs text-muted-foreground">{card.offeringCardType}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">You'll send</p>
+          <p className="text-sm text-foreground font-semibold">{card.wantedCard}</p>
+          <p className="text-xs text-muted-foreground">{card.wantedCardType}</p>
         </div>
 
-        {card.offeringCardImage && (
+        {card.wantedCardImage && (
           <div className="rounded-md overflow-hidden aspect-[4/3]">
-            <img src={card.offeringCardImage} alt={card.offeringCard} className="w-full h-full object-cover" />
+            <img src={card.wantedCardImage} alt={card.wantedCard} className="w-full h-full object-cover" />
           </div>
         )}
+
+        <div className="space-y-1.5 rounded-md border border-accent/30 bg-accent/5 p-3">
+          <p className="text-[10px] uppercase tracking-wider text-accent">You'll receive (pick one in-game)</p>
+          <div className="flex flex-wrap gap-1">
+            {card.offeringCards.map((o) => (
+              <span key={o} className="px-1.5 py-0.5 rounded border border-accent/40 bg-accent/10 text-accent text-[10px] font-medium">
+                {o}
+              </span>
+            ))}
+          </div>
+        </div>
 
         <div className="rounded-md bg-secondary p-3">
           <p className="text-xs text-muted-foreground mb-1">Code</p>
