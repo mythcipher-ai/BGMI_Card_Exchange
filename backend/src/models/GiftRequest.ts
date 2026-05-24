@@ -12,7 +12,7 @@ export interface IGiftRequest extends Document {
   fromUser: Types.ObjectId;
   toUser: Types.ObjectId;
   requesterName: string;
-  requesterEmail: string;
+  requesterEmail?: string;
   message: string;
   popularityOffered: number;
   status: GiftRequestStatus;
@@ -29,7 +29,10 @@ const giftRequestSchema = new Schema<IGiftRequest>({
   fromUser: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
   toUser: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
   requesterName: { type: String, required: true, trim: true, maxlength: 60 },
-  requesterEmail: { type: String, required: true, trim: true, lowercase: true, maxlength: 120 },
+  // No longer collected from the client — defaults to the requester's
+  // authenticated user email. Kept as optional to support providers that
+  // don't expose an email.
+  requesterEmail: { type: String, trim: true, lowercase: true, maxlength: 120, default: "" },
   message: { type: String, required: true, trim: true, maxlength: 500 },
   popularityOffered: { type: Number, default: 0, min: 0, max: 1000 },
   status: {

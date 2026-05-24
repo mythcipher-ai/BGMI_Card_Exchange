@@ -4,26 +4,14 @@ import AdminRewardsTable from "@/components/AdminRewardsTable";
 import { toast } from "sonner";
 import {
   adminGetUsers,
-  adminGetUserDetail,
-  adminBlockUser,
-  adminUnblockUser,
-  adminSetUserRole,
   type AdminUser
 } from "@/lib/api";
 import {
-  Loader2, AlertTriangle, Ban, CheckCircle, X,
-  ChevronRight, Clock, Shield, Briefcase, UserCog
+  Loader2, AlertTriangle, Ban,
+  ChevronRight, Shield, Briefcase
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-
-interface UserDetail {
-  user: any;
-  listings: any[];
-  claims: any[];
-  ips: string[];
-  sharedIpUsers: any[];
-}
 
 /** Extract a readable display name from user data */
 function getDisplayName(u: { name?: string; email?: string; auth0Id?: string }): string {
@@ -42,8 +30,6 @@ const UserManagement = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "flagged" | "blocked">("all");
   const [section, setSection] = useState<"users" | "rewards">("users");
 
@@ -66,55 +52,8 @@ const UserManagement = () => {
     }
   };
 
-  const openDetail = async (userId: string) => {
-    setDetailLoading(true);
-    try {
-      const detail = await adminGetUserDetail(userId);
-      setSelectedUser(detail);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load user detail");
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const handleBlock = async (userId: string) => {
-    try {
-      await adminBlockUser(userId);
-      toast.success("User blocked");
-      setUsers((prev) => prev.map((u) => u._id === userId ? { ...u, status: "blocked" } : u));
-      if (selectedUser?.user._id === userId) {
-        setSelectedUser((prev) => prev ? { ...prev, user: { ...prev.user, status: "blocked" } } : null);
-      }
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleUnblock = async (userId: string) => {
-    try {
-      await adminUnblockUser(userId);
-      toast.success("User unblocked");
-      setUsers((prev) => prev.map((u) => u._id === userId ? { ...u, status: "active" } : u));
-      if (selectedUser?.user._id === userId) {
-        setSelectedUser((prev) => prev ? { ...prev, user: { ...prev.user, status: "active" } } : null);
-      }
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleSetRole = async (userId: string, role: "user" | "manager") => {
-    try {
-      await adminSetUserRole(userId, role);
-      toast.success(role === "manager" ? "Promoted to Manager" : "Demoted to User");
-      setUsers((prev) => prev.map((u) => u._id === userId ? { ...u, role } : u));
-      if (selectedUser?.user._id === userId) {
-        setSelectedUser((prev) => prev ? { ...prev, user: { ...prev.user, role } } : null);
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to change role");
-    }
+  const openDetail = (userId: string) => {
+    navigate(`/admin/users/${userId}`);
   };
 
   // "Flagged" now covers both: shared-IP detections AND trade-dispute flags
@@ -273,179 +212,6 @@ const UserManagement = () => {
           </div>
         )}
 
-        {/* User Detail Modal */}
-        {(selectedUser || detailLoading) && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4" onClick={() => setSelectedUser(null)}>
-            <div
-              className="w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-lg border border-border bg-card p-5 space-y-4 animate-slide-up"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {detailLoading ? (
-                <div className="py-8 flex justify-center">
-                  <Loader2 className="animate-spin text-primary" size={24} />
-                </div>
-              ) : selectedUser && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-heading text-base font-semibold text-foreground">User Detail</h2>
-                    <button onClick={() => setSelectedUser(null)} className="text-muted-foreground hover:text-foreground">
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  {/* User info */}
-                  <div className="rounded-md bg-secondary p-3 space-y-1 text-sm">
-                    <p className="text-foreground font-medium flex items-center gap-2">
-                      {getDisplayName(selectedUser.user)}
-                      {selectedUser.user.role === "admin" && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-primary/20 text-primary border border-primary/40 rounded">
-                          <Shield size={9} aria-hidden="true" /> Admin
-                        </span>
-                      )}
-                      {selectedUser.user.role === "manager" && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-accent/20 text-accent border border-accent/40 rounded">
-                          <Briefcase size={9} aria-hidden="true" /> Manager
-                        </span>
-                      )}
-                    </p>
-                    {selectedUser.user.email && (
-                      <p className="text-xs text-muted-foreground">{selectedUser.user.email}</p>
-                    )}
-                    <div className="flex gap-3 text-xs text-muted-foreground">
-                      <span>Status: <span className={selectedUser.user.status === "blocked" ? "text-destructive" : "text-primary"}>{selectedUser.user.status}</span></span>
-                      <span>Listed: {selectedUser.listings.length}</span>
-                      <span>Claimed: {selectedUser.listings.filter((l: any) => l.status === "claimed").length}</span>
-                    </div>
-                  </div>
-
-                  {/* Role controls (Admin can promote/demote between user and manager; admins are off-limits via API). */}
-                  {selectedUser.user.role !== "admin" && (
-                    <div className="rounded-md border border-border p-3 space-y-2">
-                      <h3 className="text-xs font-semibold text-foreground flex items-center gap-1">
-                        <UserCog size={12} aria-hidden="true" /> Role
-                      </h3>
-                      <p className="text-[11px] text-muted-foreground">
-                        Managers can manage cards and events. They cannot access user management.
-                      </p>
-                      <div className="flex gap-2">
-                        {selectedUser.user.role === "user" ? (
-                          <button
-                            type="button"
-                            onClick={() => handleSetRole(selectedUser.user._id, "manager")}
-                            className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground hover:bg-accent/90 inline-flex items-center gap-1"
-                          >
-                            <Briefcase size={11} aria-hidden="true" /> Promote to Manager
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleSetRole(selectedUser.user._id, "user")}
-                            className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary inline-flex items-center gap-1"
-                          >
-                            Demote to User
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* IP Info */}
-                  {selectedUser.ips.length > 0 && (
-                    <div className="space-y-1">
-                      <h3 className="text-xs font-semibold text-foreground">IP Addresses Used</h3>
-                      <div className="flex flex-wrap gap-1">
-                        {selectedUser.ips.map((ip: string) => (
-                          <span key={ip} className="px-2 py-0.5 text-[10px] font-mono bg-secondary rounded text-muted-foreground">{ip}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Shared IP Users */}
-                  {selectedUser.sharedIpUsers.length > 0 && (
-                    <div className="space-y-1">
-                      <h3 className="text-xs font-semibold text-destructive flex items-center gap-1">
-                        <AlertTriangle size={12} /> Shares IP with other accounts
-                      </h3>
-                      {selectedUser.sharedIpUsers.map((su: any) => (
-                        <div key={su._id} className="flex items-center justify-between rounded-md border border-destructive/20 bg-destructive/5 p-2 text-xs">
-                          <span className="text-foreground">{getDisplayName(su)}</span>
-                          <span className="text-muted-foreground font-mono">{su.sharedIps.join(", ")}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Listings */}
-                  <div className="space-y-1">
-                    <h3 className="text-xs font-semibold text-foreground">Listings ({selectedUser.listings.length})</h3>
-                    {selectedUser.listings.length === 0 ? (
-                      <p className="text-[10px] text-muted-foreground">No listings</p>
-                    ) : (
-                      <div className="max-h-32 overflow-y-auto space-y-1">
-                        {selectedUser.listings.map((l: any) => (
-                          <div key={l._id} className="flex items-center justify-between rounded bg-secondary p-2 text-xs">
-                            <span className="text-foreground truncate">
-                              {(l.offeringCards || []).join(", ") || "(none)"} → {l.wantedCard || "?"}
-                            </span>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <span>{l.status}</span>
-                              <Clock size={10} />
-                              <span>{new Date(l.createdAt).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Claims */}
-                  <div className="space-y-1">
-                    <h3 className="text-xs font-semibold text-foreground">Claims ({selectedUser.claims.length})</h3>
-                    {selectedUser.claims.length === 0 ? (
-                      <p className="text-[10px] text-muted-foreground">No claims</p>
-                    ) : (
-                      <div className="max-h-32 overflow-y-auto space-y-1">
-                        {selectedUser.claims.map((c: any) => (
-                          <div key={c._id} className="flex items-center justify-between rounded bg-secondary p-2 text-xs">
-                            <span className="text-foreground truncate">
-                              {(c.listingId?.offeringCards || []).join(", ") || c.listingId?.wantedCard || "Unknown"}
-                            </span>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <span className="font-mono">{c.ipAddress}</span>
-                              <span>{new Date(c.createdAt).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  {selectedUser.user.role !== "admin" && (
-                    <div className="pt-2 border-t border-border">
-                      {selectedUser.user.status === "active" ? (
-                        <button
-                          onClick={() => handleBlock(selectedUser.user._id)}
-                          className="w-full rounded-md bg-destructive py-2 text-sm font-semibold text-destructive-foreground hover:bg-destructive/90 transition-colors flex items-center justify-center gap-2"
-                        >
-                          <Ban size={14} /> Block User
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleUnblock(selectedUser.user._id)}
-                          className="w-full rounded-md bg-primary py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-                        >
-                          <CheckCircle size={14} /> Unblock User
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
           </>
         )}
       </main>

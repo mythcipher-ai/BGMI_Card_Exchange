@@ -50,7 +50,7 @@ const CardDetailModal = ({ card, onClose, onClaim, onGift }: CardDetailModalProp
       >
         <header className="flex items-center gap-3 p-4 border-b border-border">
           {card.imageUrl && (
-            <img src={card.imageUrl} alt="" className="w-14 h-10 rounded object-cover bg-secondary shrink-0" />
+            <img src={card.imageUrl} alt="" className="w-14 h-20 rounded object-cover bg-secondary shrink-0" />
           )}
           <div className="flex-1 min-w-0">
             <h2 id="card-detail-title" className="font-heading text-base font-semibold text-foreground truncate">

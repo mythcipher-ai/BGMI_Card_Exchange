@@ -2,8 +2,36 @@ import nodemailer, { Transporter } from "nodemailer";
 import { config, giftEmailReady } from "../config";
 
 let transporter: Transporter | null = null;
+let readinessLogged = false;
+
+function logReadinessOnce() {
+  if (readinessLogged) return;
+  readinessLogged = true;
+  if (!giftEmailReady) {
+    console.warn(
+      "[email] SMTP is NOT configured — emails will be skipped. Required env vars:",
+      {
+        ENABLE_GIFTS: process.env.ENABLE_GIFTS ?? "(unset, defaults to true)",
+        SMTP_HOST: config.smtpHost ? "set" : "MISSING",
+        SMTP_USER: config.smtpUser ? "set" : "MISSING",
+        SMTP_PASS: config.smtpPass ? "set" : "MISSING",
+        SMTP_PORT: config.smtpPort,
+        SMTP_SECURE: config.smtpSecure
+      }
+    );
+  } else {
+    console.log("[email] SMTP configured", {
+      host: config.smtpHost,
+      port: config.smtpPort,
+      secure: config.smtpSecure,
+      user: config.smtpUser,
+      from: config.emailFromAddress
+    });
+  }
+}
 
 function getTransporter(): Transporter | null {
+  logReadinessOnce();
   if (!giftEmailReady) return null;
   if (transporter) return transporter;
   transporter = nodemailer.createTransport({
@@ -13,9 +41,45 @@ function getTransporter(): Transporter | null {
     auth: {
       user: config.smtpUser,
       pass: config.smtpPass
-    }
+    },
+    logger: process.env.SMTP_DEBUG === "true",
+    debug: process.env.SMTP_DEBUG === "true"
   });
+  // Verify the SMTP connection at first use so we get a single, loud log
+  // line on misconfiguration instead of silent per-message failures.
+  transporter.verify().then(
+    () => console.log("[email] SMTP verify OK"),
+    (err) => console.error("[email] SMTP verify FAILED:", err?.message || err)
+  );
   return transporter;
+}
+
+// Wrapper around sendMail that always logs whether the message went out.
+// The individual send functions still resolve {ok, error} for callers, but
+// the side-effect log here makes debugging "why didn't I get the email?"
+// trivial when the user is staring at the backend console.
+async function sendAndLog(t: Transporter, kind: string, options: Parameters<Transporter["sendMail"]>[0]) {
+  try {
+    const info = await t.sendMail(options);
+    console.log(`[email] ${kind} sent`, {
+      to: options.to,
+      subject: options.subject,
+      messageId: info?.messageId,
+      accepted: info?.accepted,
+      rejected: info?.rejected,
+      response: info?.response
+    });
+    return { ok: true as const };
+  } catch (err: any) {
+    console.error(`[email] ${kind} FAILED`, {
+      to: options.to,
+      subject: options.subject,
+      error: err?.message || String(err),
+      code: err?.code,
+      response: err?.response
+    });
+    return { ok: false as const, error: err?.message || "send_failed" };
+  }
 }
 
 function escapeHtml(s: string): string {
@@ -101,19 +165,17 @@ function renderText(p: GiftRequestEmailParams): string {
 
 export async function sendGiftRequestEmail(params: GiftRequestEmailParams): Promise<{ ok: boolean; error?: string }> {
   const t = getTransporter();
-  if (!t) return { ok: false, error: "email_disabled" };
-  try {
-    await t.sendMail({
-      from: config.emailFromAddress,
-      to: params.to,
-      subject: `New Gift Request for "${params.cardName}"`,
-      text: renderText(params),
-      html: renderHtml(params)
-    });
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "send_failed" };
+  if (!t) {
+    console.warn("[email] sendGiftRequestEmail skipped — SMTP not ready");
+    return { ok: false, error: "email_disabled" };
   }
+  return sendAndLog(t, "gift_request", {
+    from: config.emailFromAddress,
+    to: params.to,
+    subject: `New Gift Request for "${params.cardName}"`,
+    text: renderText(params),
+    html: renderHtml(params)
+  });
 }
 
 // ==========================================================================
@@ -141,7 +203,10 @@ export interface RewardClaimAdminParams {
 
 export async function sendRewardClaimToAdmin(p: RewardClaimAdminParams): Promise<{ ok: boolean; error?: string }> {
   const t = getTransporter();
-  if (!t) return { ok: false, error: "email_disabled" };
+  if (!t) {
+    console.warn("[email] sendRewardClaimToAdmin skipped — SMTP not ready");
+    return { ok: false, error: "email_disabled" };
+  }
   const adminTo = config.adminEmail || config.emailFromAddress;
   const html = wrap(`
     <h1 style="margin:0 0 12px; font-size:20px; color:#3b82f6;">New Reward Claim</h1>
@@ -165,17 +230,12 @@ export async function sendRewardClaimToAdmin(p: RewardClaimAdminParams): Promise
     `Submitted:   ${p.submittedAt.toISOString()}`,
     renderFooterText()
   ].join("\n");
-  try {
-    await t.sendMail({
-      from: config.emailFromAddress,
-      to: adminTo,
-      subject: `Reward claim — milestone ${p.milestone} (${p.popularityAmount} popularity)`,
-      text, html
-    });
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "send_failed" };
-  }
+  return sendAndLog(t, "reward_claim_admin", {
+    from: config.emailFromAddress,
+    to: adminTo,
+    subject: `Reward claim — milestone ${p.milestone} (${p.popularityAmount} popularity)`,
+    text, html
+  });
 }
 
 export interface RewardDeliveredUserParams {
@@ -188,7 +248,10 @@ export interface RewardDeliveredUserParams {
 
 export async function sendRewardDeliveredToUser(p: RewardDeliveredUserParams): Promise<{ ok: boolean; error?: string }> {
   const t = getTransporter();
-  if (!t) return { ok: false, error: "email_disabled" };
+  if (!t) {
+    console.warn("[email] sendRewardDeliveredToUser skipped — SMTP not ready");
+    return { ok: false, error: "email_disabled" };
+  }
   const html = wrap(`
     <h1 style="margin:0 0 12px; font-size:20px; color:#10b981;">Your reward has been delivered</h1>
     <p style="margin:0 0 12px; color:#c9d1e3;">Hi ${escapeHtml(p.toName || "trader")},</p>
@@ -208,17 +271,12 @@ export async function sendRewardDeliveredToUser(p: RewardDeliveredUserParams): P
     `Check your BGMI account. Reply if you don't receive it within a few minutes.`,
     renderFooterText()
   ].join("\n");
-  try {
-    await t.sendMail({
-      from: config.emailFromAddress,
-      to: p.to,
-      subject: `Reward delivered — ${p.popularityAmount} popularity (milestone ${p.milestone})`,
-      text, html
-    });
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "send_failed" };
-  }
+  return sendAndLog(t, "reward_delivered", {
+    from: config.emailFromAddress,
+    to: p.to,
+    subject: `Reward delivered — ${p.popularityAmount} popularity (milestone ${p.milestone})`,
+    text, html
+  });
 }
 
 export interface RewardRejectedUserParams {
@@ -231,7 +289,10 @@ export interface RewardRejectedUserParams {
 
 export async function sendRewardRejectedToUser(p: RewardRejectedUserParams): Promise<{ ok: boolean; error?: string }> {
   const t = getTransporter();
-  if (!t) return { ok: false, error: "email_disabled" };
+  if (!t) {
+    console.warn("[email] sendRewardRejectedToUser skipped — SMTP not ready");
+    return { ok: false, error: "email_disabled" };
+  }
   const reasonHtml = p.rejectionReason
     ? `<p style="margin:0 0 12px; color:#c9d1e3; font-size:13px;">Reason: <em style="color:#fff;">${escapeHtml(p.rejectionReason)}</em></p>`
     : "";
@@ -250,17 +311,12 @@ export async function sendRewardRejectedToUser(p: RewardRejectedUserParams): Pro
     `Reply to this email if you think this is a mistake.`,
     renderFooterText()
   ].filter(Boolean).join("\n");
-  try {
-    await t.sendMail({
-      from: config.emailFromAddress,
-      to: p.to,
-      subject: `Reward claim — milestone ${p.milestone} not approved`,
-      text, html
-    });
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "send_failed" };
-  }
+  return sendAndLog(t, "reward_rejected", {
+    from: config.emailFromAddress,
+    to: p.to,
+    subject: `Reward claim — milestone ${p.milestone} not approved`,
+    text, html
+  });
 }
 
 // ==========================================================================
@@ -278,7 +334,10 @@ export interface ClaimNotifyOwnerParams {
 // confirm receipt of the wanted card in-game once they've checked.
 export async function sendClaimNotifyOwner(p: ClaimNotifyOwnerParams): Promise<{ ok: boolean; error?: string }> {
   const t = getTransporter();
-  if (!t) return { ok: false, error: "email_disabled" };
+  if (!t) {
+    console.warn("[email] sendClaimNotifyOwner skipped — SMTP not ready", { to: p.to });
+    return { ok: false, error: "email_disabled" };
+  }
   const profileUrl = `${siteUrl()}/profile`;
   const html = wrap(`
     <h1 style="margin:0 0 12px; font-size:20px; color:#3b82f6;">Your card was just traded</h1>
@@ -301,17 +360,62 @@ export async function sendClaimNotifyOwner(p: ClaimNotifyOwnerParams): Promise<{
     `Profile: ${profileUrl}`,
     renderFooterText()
   ].filter(Boolean).join("\n");
-  try {
-    await t.sendMail({
-      from: config.emailFromAddress,
-      to: p.to,
-      subject: `Trade code claimed: "${p.offeringCard}" — please confirm receipt`,
-      text, html
-    });
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "send_failed" };
+  return sendAndLog(t, "claim_notify_owner", {
+    from: config.emailFromAddress,
+    to: p.to,
+    subject: `Trade code claimed: "${p.offeringCard}" — please confirm receipt`,
+    text, html
+  });
+}
+
+export interface ClaimReceiptClaimerParams {
+  to: string;
+  toName?: string;
+  offeringCard: string;
+  wantedCard: string;
+  revealedCode: string;
+  ownerName?: string;
+}
+
+// Receipt email to the claimer the moment they successfully claim a code.
+// Captures the code in their inbox in case the browser modal closes early or
+// the device runs out of clipboard, and gives the trade a paper trail.
+export async function sendClaimReceiptToClaimer(p: ClaimReceiptClaimerParams): Promise<{ ok: boolean; error?: string }> {
+  const t = getTransporter();
+  if (!t) {
+    console.warn("[email] sendClaimReceiptToClaimer skipped — SMTP not ready", { to: p.to });
+    return { ok: false, error: "email_disabled" };
   }
+  const html = wrap(`
+    <h1 style="margin:0 0 12px; font-size:20px; color:#3b82f6;">You claimed a trade</h1>
+    <p style="margin:0 0 12px; color:#c9d1e3;">Hi ${escapeHtml(p.toName || "trader")},</p>
+    <p style="margin:0 0 12px; color:#c9d1e3;">You just claimed the listing for <strong style="color:#fff;">${escapeHtml(p.offeringCard)}</strong>${p.ownerName ? ` (listed by ${escapeHtml(p.ownerName)})` : ""}.</p>
+    <div style="background:#070b1d; border-left:3px solid #3b82f6; padding:14px; border-radius:6px; margin:0 0 16px;">
+      <p style="margin:0 0 4px; color:#8b95b3; font-size:12px; text-transform:uppercase; letter-spacing:1px;">Trade code</p>
+      <p style="margin:0; color:#fff; font-family:monospace; font-size:22px; letter-spacing:4px;">${escapeHtml(p.revealedCode)}</p>
+    </div>
+    <table style="width:100%; border-collapse:collapse; margin:0 0 16px;">
+      <tr><td style="padding:6px 0; color:#8b95b3; width:130px;">You'll send</td><td style="padding:6px 0; color:#fff;">${escapeHtml(p.wantedCard)}</td></tr>
+      <tr><td style="padding:6px 0; color:#8b95b3;">You'll receive</td><td style="padding:6px 0; color:#fff;">${escapeHtml(p.offeringCard)} (pick one in-game)</td></tr>
+    </table>
+    <p style="margin:0; color:#c9d1e3; font-size:13px;">Open BGMI, enter the code, and complete the trade. The listing owner will be asked to confirm receipt of your wanted card.</p>`);
+  const text = [
+    `You claimed a trade`,
+    "",
+    `Trade code:   ${p.revealedCode}`,
+    `You send:     ${p.wantedCard}`,
+    `You receive:  ${p.offeringCard} (pick one in-game)`,
+    p.ownerName ? `Listed by:    ${p.ownerName}` : "",
+    "",
+    `Open BGMI, enter the code, and complete the trade. The owner will be asked to confirm receipt.`,
+    renderFooterText()
+  ].filter(Boolean).join("\n");
+  return sendAndLog(t, "claim_receipt", {
+    from: config.emailFromAddress,
+    to: p.to,
+    subject: `Trade claimed: code ${p.revealedCode}`,
+    text, html
+  });
 }
 
 export interface TradeConfirmedClaimerParams {
@@ -323,7 +427,10 @@ export interface TradeConfirmedClaimerParams {
 // Soft "all clear" ping to the claimer once the owner confirmed the trade.
 export async function sendTradeConfirmedToClaimer(p: TradeConfirmedClaimerParams): Promise<{ ok: boolean; error?: string }> {
   const t = getTransporter();
-  if (!t) return { ok: false, error: "email_disabled" };
+  if (!t) {
+    console.warn("[email] sendTradeConfirmedToClaimer skipped — SMTP not ready", { to: p.to });
+    return { ok: false, error: "email_disabled" };
+  }
   const html = wrap(`
     <h1 style="margin:0 0 12px; font-size:20px; color:#10b981;">Trade marked as successful</h1>
     <p style="margin:0 0 12px; color:#c9d1e3;">Hi ${escapeHtml(p.toName || "trader")},</p>
@@ -337,17 +444,12 @@ export async function sendTradeConfirmedToClaimer(p: TradeConfirmedClaimerParams
     "Thanks for trading fairly!",
     renderFooterText()
   ].join("\n");
-  try {
-    await t.sendMail({
-      from: config.emailFromAddress,
-      to: p.to,
-      subject: `Trade confirmed: "${p.offeringCard}"`,
-      text, html
-    });
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "send_failed" };
-  }
+  return sendAndLog(t, "trade_confirmed", {
+    from: config.emailFromAddress,
+    to: p.to,
+    subject: `Trade confirmed: "${p.offeringCard}"`,
+    text, html
+  });
 }
 
 export interface TradeDisputedClaimerParams {
@@ -362,7 +464,10 @@ export interface TradeDisputedClaimerParams {
 // Includes their current flag count so they understand the stakes.
 export async function sendTradeDisputedToClaimer(p: TradeDisputedClaimerParams): Promise<{ ok: boolean; error?: string }> {
   const t = getTransporter();
-  if (!t) return { ok: false, error: "email_disabled" };
+  if (!t) {
+    console.warn("[email] sendTradeDisputedToClaimer skipped — SMTP not ready", { to: p.to });
+    return { ok: false, error: "email_disabled" };
+  }
   const reasonHtml = p.reason
     ? `<p style="margin:0 0 12px; color:#c9d1e3; font-size:13px;">Reason given: <em style="color:#fff;">${escapeHtml(p.reason)}</em></p>`
     : "";
@@ -384,15 +489,10 @@ export async function sendTradeDisputedToClaimer(p: TradeDisputedClaimerParams):
     "Reply to this email if you believe this was a mistake.",
     renderFooterText()
   ].filter(Boolean).join("\n");
-  try {
-    await t.sendMail({
-      from: config.emailFromAddress,
-      to: p.to,
-      subject: `Trade disputed: "${p.offeringCard}"`,
-      text, html
-    });
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "send_failed" };
-  }
+  return sendAndLog(t, "trade_disputed", {
+    from: config.emailFromAddress,
+    to: p.to,
+    subject: `Trade disputed: "${p.offeringCard}"`,
+    text, html
+  });
 }

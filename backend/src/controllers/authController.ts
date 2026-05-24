@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { User } from "../models/User";
+import { computeEffectiveTrades } from "../utils/milestones";
 
 export async function getMe(req: Request, res: Response, next: NextFunction) {
   try {
@@ -7,6 +8,12 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
     if (!user) {
       return res.status(401).json({ message: "Missing authenticated user" });
     }
+
+    // Compute milestone-eligible trade count live. The stored
+    // user.successfulTrades counter only reflects the listing-leg, but the
+    // milestone counts only completed pairs (listing-confirmed AND claim-
+    // confirmed). See utils/milestones.ts.
+    const { effective, listedConfirmed, claimedConfirmed } = await computeEffectiveTrades(user.id);
 
     res.json({
       id: user.id,
@@ -19,7 +26,9 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
       trustScore: user.trustScore,
       totalClaims: user.totalClaims,
       successfulClaims: user.successfulClaims,
-      successfulTrades: user.successfulTrades ?? 0,
+      successfulTrades: effective,
+      listedConfirmed,
+      claimedConfirmed,
       reportsCount: user.reportsCount,
       dailyClaims: user.dailyClaims,
       instagramHandle: user.instagramHandle,
@@ -39,13 +48,20 @@ export async function syncProfile(req: Request, res: Response, next: NextFunctio
       return res.status(401).json({ message: "Missing authenticated user" });
     }
 
-    const { name, picture } = req.body;
+    const { name, email, picture } = req.body;
     const update: Record<string, string> = {};
     if (name && typeof name === "string") update.name = name;
     if (picture && typeof picture === "string") update.picture = picture;
+    // Email is the linchpin for every outbound notification — claim alerts,
+    // trade outcome emails, gift requests. Persist whatever the IdP gives us.
+    if (email && typeof email === "string") {
+      const clean = email.trim().toLowerCase();
+      if (clean) update.email = clean;
+    }
 
     if (Object.keys(update).length > 0) {
       await User.findByIdAndUpdate(user.id, update);
+      console.log("[auth] syncProfile", { userId: user.id, fields: Object.keys(update) });
     }
 
     res.json({ ok: true });

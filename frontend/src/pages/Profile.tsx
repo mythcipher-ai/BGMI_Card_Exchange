@@ -3,15 +3,18 @@ import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
 import ProfileStats from "@/components/ProfileStats";
 import GiftRequestList from "@/components/GiftRequestList";
-import { Trash2, Loader2, CheckCircle, Clock, LogOut, Hourglass, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
+import { Trash2, Loader2, CheckCircle, Clock, LogOut, Hourglass, ShieldCheck, ShieldAlert, AlertTriangle, Copy, Check, ArrowUpRight } from "lucide-react";
 import { expiresIn, EXPIRY_TONE_CLASS } from "@/lib/time";
 import { toast } from "sonner";
 import {
   fetchMyListings,
+  fetchMyClaims,
   deleteListing,
   confirmTradeReceived,
   disputeTrade,
-  type MyListing
+  markListingExternal,
+  type MyListing,
+  type MyClaim
 } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -25,7 +28,7 @@ function timeAgo(date: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-type Tab = "listings" | "gifts-in" | "gifts-out";
+type Tab = "listings" | "claimed" | "gifts-in" | "gifts-out";
 
 const Profile = () => {
   const { isAuthenticated, isLoading: authLoading, user: authUser, login, logout, refreshUser } = useAuth();
@@ -33,9 +36,11 @@ const Profile = () => {
   const [params, setParams] = useSearchParams();
   const initialTab: Tab = params.get("tab") === "gifts" ? "gifts-in"
     : params.get("tab") === "gifts-out" ? "gifts-out"
+    : params.get("tab") === "claimed" ? "claimed"
     : "listings";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [myListings, setMyListings] = useState<MyListing[]>([]);
+  const [myClaims, setMyClaims] = useState<MyClaim[]>([]);
   const [loading, setLoading] = useState(true);
   const [outcomeBusyId, setOutcomeBusyId] = useState<string | null>(null);
 
@@ -45,9 +50,11 @@ const Profile = () => {
       return;
     }
     if (isAuthenticated) {
-      fetchMyListings()
-        .then((res) => setMyListings(res.data))
-        .catch((err: any) => toast.error(err.message || "Failed to load listings"))
+      Promise.all([
+        fetchMyListings().then((res) => setMyListings(res.data)),
+        fetchMyClaims().then((res) => setMyClaims(res.data))
+      ])
+        .catch((err: any) => toast.error(err.message || "Failed to load profile"))
         .finally(() => setLoading(false));
     }
   }, [authLoading, isAuthenticated]);
@@ -63,11 +70,26 @@ const Profile = () => {
     }
   };
 
+  const handleMarkExternal = async (id: string) => {
+    const ok = window.confirm(
+      "Mark this listing as traded off-platform? It will close the listing without counting toward your milestone rewards."
+    );
+    if (!ok) return;
+    try {
+      await markListingExternal(id);
+      toast.success("Listing closed. It won't count as a trade.");
+      setMyListings((prev) => prev.map((l) => l.id === id ? { ...l, status: "external" } : l));
+      refreshUser();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to mark listing as off-platform");
+    }
+  };
+
   const handleConfirm = async (id: string) => {
     setOutcomeBusyId(id);
     try {
       const res = await confirmTradeReceived(id);
-      toast.success("Trade confirmed — counted toward your milestone rewards.");
+      toast.success("Trade confirmed. Counted toward your milestone rewards.");
       setMyListings((prev) => prev.map((l) =>
         l.id === id ? { ...l, tradeOutcome: res.tradeOutcome, outcomeAt: res.outcomeAt } : l
       ));
@@ -88,7 +110,7 @@ const Profile = () => {
     setOutcomeBusyId(id);
     try {
       const res = await disputeTrade(id, reason);
-      toast.success("Trade marked as not received — the claimer has been flagged.");
+      toast.success("Trade marked as not received. The claimer has been flagged.");
       setMyListings((prev) => prev.map((l) =>
         l.id === id ? { ...l, tradeOutcome: res.tradeOutcome, outcomeAt: res.outcomeAt, disputeReason: reason ?? null } : l
       ));
@@ -101,7 +123,10 @@ const Profile = () => {
 
   const setActiveTab = (t: Tab) => {
     setTab(t);
-    const tabParam = t === "gifts-in" ? "gifts" : t === "gifts-out" ? "gifts-out" : null;
+    const tabParam = t === "gifts-in" ? "gifts"
+      : t === "gifts-out" ? "gifts-out"
+      : t === "claimed" ? "claimed"
+      : null;
     if (tabParam) {
       setParams({ tab: tabParam });
     } else {
@@ -160,13 +185,16 @@ const Profile = () => {
 
           <ProfileStats
             listed={myListings.length}
-            claimed={claimedListings.length}
+            claimed={myClaims.length}
           />
         </div>
 
-        <div role="tablist" aria-label="Profile sections" className="flex gap-1 border-b border-border">
+        <div role="tablist" aria-label="Profile sections" className="flex gap-1 border-b border-border overflow-x-auto">
           <TabButton active={tab === "listings"} onClick={() => setActiveTab("listings")}>
             My Listings
+          </TabButton>
+          <TabButton active={tab === "claimed"} onClick={() => setActiveTab("claimed")}>
+            Claimed
           </TabButton>
           <TabButton active={tab === "gifts-in"} onClick={() => setActiveTab("gifts-in")}>
             Gift Requests
@@ -219,6 +247,14 @@ const Profile = () => {
                           {expiry.tone === "expired" ? "Expired" : `Expires in ${expiry.label.replace(" left", "")}`}
                         </span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkExternal(listing.id)}
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 text-accent py-1.5 text-[11px] font-semibold hover:bg-accent/20 transition-colors"
+                      >
+                        <ArrowUpRight size={12} aria-hidden="true" />
+                        I traded this off-platform
+                      </button>
                     </div>
                   );
                 })
@@ -297,6 +333,17 @@ const Profile = () => {
           </>
         )}
 
+        {tab === "claimed" && (
+          <section className="space-y-2">
+            <h2 className="font-heading text-sm font-semibold text-foreground">Cards You've Claimed</h2>
+            {myClaims.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">No claims yet. Browse cards on the home page.</p>
+            ) : (
+              myClaims.map((claim) => <ClaimedItem key={claim.id} claim={claim} />)
+            )}
+          </section>
+        )}
+
         {tab === "gifts-in" && (
           <section className="space-y-2">
             <h2 className="font-heading text-sm font-semibold text-foreground">Incoming Gift Requests</h2>
@@ -342,6 +389,71 @@ const OutcomeBadge = ({ outcome }: { outcome: MyListing["tradeOutcome"] }) => {
     <span className="px-2 py-0.5 text-[10px] font-semibold uppercase bg-primary/20 text-primary rounded flex items-center gap-1 shrink-0">
       <CheckCircle size={10} aria-hidden="true" /> Claimed
     </span>
+  );
+};
+
+const ClaimedItem = ({ claim }: { claim: MyClaim }) => {
+  const [copied, setCopied] = useState(false);
+  const offeringLabel = claim.offeringCards.join(", ");
+  const cover = claim.wantedCardImage || claim.offeringCardImages[0]?.imageUrl;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(claim.revealedCode);
+      setCopied(true);
+      toast.success("Code copied");
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Couldn't copy. Long-press to copy manually.");
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-accent/30 bg-accent/5 p-3 space-y-2">
+      <div className="flex items-center gap-3">
+        {cover && (
+          <img src={cover} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-foreground truncate">
+            You received: <span className="text-accent">{offeringLabel || "-"}</span>
+          </p>
+          <p className="text-xs text-muted-foreground truncate">You sent: {claim.wantedCard}</p>
+        </div>
+        <OutcomeBadge outcome={claim.tradeOutcome} />
+      </div>
+
+      <div className="rounded-md bg-secondary px-2.5 py-1.5 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Trade code</p>
+          <p className="font-mono text-sm text-foreground tracking-wider select-all truncate">
+            {claim.revealedCode}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label="Copy code"
+          className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition-colors shrink-0"
+        >
+          {copied ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+
+      {claim.owner && (
+        <p className="text-[10px] text-muted-foreground">
+          Listed by <span className="text-foreground">{claim.owner.name}</span>
+          <span> · {timeAgo(claim.claimedAt)}</span>
+        </p>
+      )}
+
+      {claim.tradeOutcome === "disputed" && claim.disputeReason && (
+        <p className="text-[11px] text-destructive">
+          Owner reported: <span className="text-foreground">{claim.disputeReason}</span>
+        </p>
+      )}
+    </div>
   );
 };
 

@@ -6,12 +6,9 @@ import { DefinedCard } from "../models/DefinedCard";
 import { sendGiftRequestEmail } from "../utils/email";
 
 const NAME_MAX = 60;
-const EMAIL_MAX = 120;
 const MESSAGE_MIN = 10;
 const MESSAGE_MAX = 500;
 const POPULARITY_MAX = 1000;
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function serialize(g: any, listingCard?: string, listingCardImage?: string, fromUserName?: string, toUserName?: string) {
   return {
@@ -38,18 +35,21 @@ export async function createGiftRequest(req: Request, res: Response, next: NextF
     if (!user) return res.status(401).json({ message: "Authentication required" });
 
     const listingId = req.params.listingId;
-    const { requesterName, requesterEmail, message, popularityOffered } = req.body ?? {};
+    const { requesterName, message, popularityOffered } = req.body ?? {};
 
     // ---- Validate payload ----
     if (typeof requesterName !== "string" || !requesterName.trim() || requesterName.trim().length > NAME_MAX) {
       return res.status(400).json({ message: "Invalid requester name" });
     }
-    if (typeof requesterEmail !== "string" || !EMAIL_RE.test(requesterEmail.trim()) || requesterEmail.length > EMAIL_MAX) {
-      return res.status(400).json({ message: "Invalid requester email" });
-    }
     if (typeof message !== "string" || message.trim().length < MESSAGE_MIN || message.trim().length > MESSAGE_MAX) {
       return res.status(400).json({ message: `Message must be ${MESSAGE_MIN}-${MESSAGE_MAX} characters` });
     }
+
+    // Requester email is no longer collected from the client — we use the
+    // authenticated user's email automatically. If they signed in via a
+    // provider that doesn't expose an email, we still store a placeholder so
+    // the listing owner sees who reached out (they can reply via the platform).
+    const requesterEmail = (user.email || "").trim().toLowerCase();
     // Popularity is BGMI in-game (the requester promises it off-platform to the owner).
     // We don't track or verify it — we just carry the number in the email.
     const offered = Math.floor(Number(popularityOffered) || 0);
@@ -79,7 +79,7 @@ export async function createGiftRequest(req: Request, res: Response, next: NextF
         fromUser: user.id,
         toUser: owner._id,
         requesterName: requesterName.trim(),
-        requesterEmail: requesterEmail.trim().toLowerCase(),
+        requesterEmail,
         message: message.trim(),
         popularityOffered: offered,
         ipAddress: req.ip,
@@ -111,7 +111,7 @@ export async function createGiftRequest(req: Request, res: Response, next: NextF
         toName: owner.name,
         cardName: offeringLabel,
         requesterName: requesterName.trim(),
-        requesterEmail: requesterEmail.trim().toLowerCase(),
+        requesterEmail,
         message: message.trim(),
         popularityOffered: offered
       });

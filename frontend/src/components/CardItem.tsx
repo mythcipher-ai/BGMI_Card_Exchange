@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Clock, Gift, Hourglass, UserCheck } from "lucide-react";
+import { ArrowRightLeft, Gift, Hourglass, UserCheck } from "lucide-react";
 import { expiresIn, EXPIRY_TONE_CLASS } from "@/lib/time";
 import { useAuth } from "@/contexts/AuthContext";
 import type { CardImage } from "@/lib/api";
@@ -30,14 +30,15 @@ interface CardItemProps {
   onGift?: (card: CardData) => void;
 }
 
-function timeAgo(date: string) {
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
+// timeAgo helper kept commented in case we restore the timestamp row later.
+// function timeAgo(date: string) {
+//   const diff = Date.now() - new Date(date).getTime();
+//   const mins = Math.floor(diff / 60000);
+//   if (mins < 60) return `${mins}m ago`;
+//   const hrs = Math.floor(mins / 60);
+//   if (hrs < 24) return `${hrs}h ago`;
+//   return `${Math.floor(hrs / 24)}d ago`;
+// }
 
 const CardItem = ({ card, onClaim, onGift }: CardItemProps) => {
   const expiry = expiresIn(card.expiresAt);
@@ -57,12 +58,12 @@ const CardItem = ({ card, onClaim, onGift }: CardItemProps) => {
       className="group rounded-lg border border-border bg-card overflow-hidden transition-all hover:border-primary/50 hover:glow-blue animate-slide-up"
       aria-label={`Listing wanting ${card.wantedCard}`}
     >
-      <div className="aspect-[4/3] w-full bg-secondary overflow-hidden relative">
+      <div className="aspect-[2.5/3] w-full bg-secondary overflow-hidden relative">
         {cover ? (
           <img
             src={cover}
             alt={coverAlt}
-            className="h-full w-full object-cover opacity-85 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300"
+            className="h-ful -mt-5 w-full object-cover opacity-85 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300"
             loading="lazy"
           />
         ) : (
@@ -74,6 +75,17 @@ const CardItem = ({ card, onClaim, onGift }: CardItemProps) => {
         <div className="absolute top-2 left-2">
           <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-background/80 backdrop-blur-sm text-primary border border-primary/40 rounded">
             {coverType}
+          </span>
+        </div>
+
+        <div className="absolute top-2 right-2">
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded bg-background/80 backdrop-blur-sm border ${
+            isExpired
+              ? "border-destructive/40 text-destructive"
+              : "border-border " + EXPIRY_TONE_CLASS[expiry.tone]
+          }`}>
+            <Hourglass size={10} aria-hidden="true" />
+            {isExpired ? "Expired" : expiry.label.replace(" left", "")}
           </span>
         </div>
       </div>
@@ -105,7 +117,8 @@ const CardItem = ({ card, onClaim, onGift }: CardItemProps) => {
           </p>
         </div>
 
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+        {/* Time-ago row hidden by request; expiry now lives on the image overlay. */}
+        {/* <div className="flex items-center justify-between text-[10px] text-muted-foreground">
           <div className="flex items-center gap-1">
             <Clock size={10} aria-hidden="true" />
             <span>{timeAgo(card.createdAt)}</span>
@@ -113,20 +126,13 @@ const CardItem = ({ card, onClaim, onGift }: CardItemProps) => {
           {card.claimCount > 0 && (
             <span aria-label={`${card.claimCount} claims`}>· {card.claimCount} claim{card.claimCount === 1 ? "" : "s"}</span>
           )}
-        </div>
-
-        <div className={`flex items-center gap-1 text-[10px] font-medium ${EXPIRY_TONE_CLASS[expiry.tone]}`}>
-          <Hourglass size={10} aria-hidden="true" />
-          <span>
-            {isExpired ? "Expired" : `Expires in ${expiry.label.replace(" left", "")}`}
-          </span>
-        </div>
+        </div> */}
 
         <div className="flex gap-1.5 mt-1">
           {isOwn ? (
             <div
               className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 py-1.5 text-xs font-semibold text-primary"
-              title="This is your own listing — you can't claim it"
+              title="This is your own listing. You can't claim it."
             >
               <UserCheck size={12} aria-hidden="true" />
               Your listing
@@ -147,11 +153,11 @@ const CardItem = ({ card, onClaim, onGift }: CardItemProps) => {
                   type="button"
                   onClick={() => onGift(card)}
                   className="inline-flex items-center justify-center gap-1 rounded-md border border-accent/40 px-2.5 py-1.5 text-xs font-semibold text-accent hover:bg-accent/10 transition-colors active:scale-[0.98]"
-                  aria-label={`Request gift on listing wanting ${card.wantedCard}`}
-                  title="Request as a gift"
+                  aria-label={`Ask to give on listing wanting ${card.wantedCard}`}
+                  title="Ask the owner to give this as a gift"
                 >
                   <Gift size={12} aria-hidden="true" />
-                  Gift
+                  Ask to Give
                 </button>
               )}
             </>

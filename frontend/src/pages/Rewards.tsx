@@ -233,14 +233,13 @@ const Rewards = () => {
                   {m.state === "pending" && (
                     <p className="text-[11px] text-amber-300 text-center">Awaiting admin review</p>
                   )}
-                  {m.state === "approved" && (
-                    <p className="text-[11px] text-sky-300 text-center">Approved — delivery in progress</p>
-                  )}
-                  {m.state === "delivered" && (
+                  {(m.state === "approved" || m.state === "delivered") && (
                     <div className="text-[11px] text-emerald-300 text-center space-y-0.5">
-                      <p>Delivered to UID {m.request?.bgmiUid}</p>
-                      {m.request?.deliveredAt && (
-                        <p className="text-muted-foreground">{new Date(m.request.deliveredAt).toLocaleDateString()}</p>
+                      <p>Approved for UID {m.request?.bgmiUid}</p>
+                      {(m.request?.deliveredAt || m.request?.createdAt) && (
+                        <p className="text-muted-foreground">
+                          {new Date(m.request.deliveredAt || m.request.createdAt).toLocaleDateString()}
+                        </p>
                       )}
                     </div>
                   )}

@@ -59,10 +59,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = await getAccessTokenSilently();
       localStorage.setItem("auth_token", token);
 
-      // Sync Auth0 profile data (name, picture) to backend
-      if (auth0User?.name || auth0User?.picture) {
+      // Sync Auth0 profile data (name, email, picture) to backend.
+      // Email is REQUIRED for outgoing notifications (claim/dispute/gift
+      // emails); without it we silently skip every send. Push it on every
+      // sign-in so the backend stays in sync with the IdP.
+      if (auth0User?.name || auth0User?.email || auth0User?.picture) {
         await syncProfile({
           name: auth0User.name,
+          email: auth0User.email,
           picture: auth0User.picture,
         }).catch(() => {}); // non-critical
       }

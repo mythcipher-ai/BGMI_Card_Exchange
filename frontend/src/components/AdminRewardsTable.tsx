@@ -6,13 +6,12 @@ import {
   type RewardStatus
 } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, Truck, XCircle, Filter } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Filter } from "lucide-react";
 
 const STATUS_FILTERS: { key: RewardStatus | "all"; label: string }[] = [
   { key: "all", label: "All" },
   { key: "pending", label: "Pending" },
   { key: "approved", label: "Approved" },
-  { key: "delivered", label: "Delivered" },
   { key: "rejected", label: "Rejected" }
 ];
 
@@ -43,7 +42,7 @@ const AdminRewardsTable = () => {
 
   useEffect(() => { load(); }, [filter]);
 
-  const updateStatus = async (row: AdminRewardRequest, next: "approved" | "delivered" | "rejected") => {
+  const updateStatus = async (row: AdminRewardRequest, next: "approved" | "rejected") => {
     let reason: string | undefined;
     if (next === "rejected") {
       const input = window.prompt("Reason for rejection (shown to user, optional):") || "";
@@ -52,11 +51,7 @@ const AdminRewardsTable = () => {
     setBusyId(row.id);
     try {
       await adminSetRewardStatus(row.id, next, reason);
-      toast.success(
-        next === "delivered" ? "Marked delivered, user emailed" :
-        next === "approved" ? "Approved" :
-        "Rejected, user emailed"
-      );
+      toast.success(next === "approved" ? "Approved, user emailed" : "Rejected, user emailed");
       load();
     } catch (err: any) {
       toast.error(err.message || "Failed to update");
@@ -68,7 +63,6 @@ const AdminRewardsTable = () => {
   const stats = {
     pending: rows.filter((r) => r.status === "pending").length,
     approved: rows.filter((r) => r.status === "approved").length,
-    delivered: rows.filter((r) => r.status === "delivered").length,
     rejected: rows.filter((r) => r.status === "rejected").length
   };
 
@@ -95,7 +89,7 @@ const AdminRewardsTable = () => {
         </div>
         {filter === "all" && (
           <span className="text-[10px] text-muted-foreground">
-            {stats.pending} pending · {stats.approved} approved · {stats.delivered} delivered · {stats.rejected} rejected
+            {stats.pending} pending · {stats.approved} approved · {stats.rejected} rejected
           </span>
         )}
       </div>
@@ -159,17 +153,9 @@ const AdminRewardsTable = () => {
                             type="button"
                             disabled={busyId === r.id}
                             onClick={() => updateStatus(r, "approved")}
-                            className="inline-flex items-center gap-1 rounded-md border border-sky-400/40 px-2 py-1 text-[11px] text-sky-300 hover:bg-sky-400/10 disabled:opacity-50"
-                          >
-                            <CheckCircle2 size={11} aria-hidden="true" /> Approve
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busyId === r.id}
-                            onClick={() => updateStatus(r, "delivered")}
                             className="inline-flex items-center gap-1 rounded-md bg-emerald-400/20 border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-400/30 disabled:opacity-50"
                           >
-                            <Truck size={11} aria-hidden="true" /> Delivered
+                            <CheckCircle2 size={11} aria-hidden="true" /> Approve
                           </button>
                           <button
                             type="button"
@@ -182,24 +168,14 @@ const AdminRewardsTable = () => {
                         </>
                       )}
                       {r.status === "approved" && (
-                        <>
-                          <button
-                            type="button"
-                            disabled={busyId === r.id}
-                            onClick={() => updateStatus(r, "delivered")}
-                            className="inline-flex items-center gap-1 rounded-md bg-emerald-400/20 border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-400/30 disabled:opacity-50"
-                          >
-                            <Truck size={11} aria-hidden="true" /> Mark delivered
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busyId === r.id}
-                            onClick={() => updateStatus(r, "rejected")}
-                            className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-2 py-1 text-[11px] text-destructive hover:bg-destructive/10 disabled:opacity-50"
-                          >
-                            <XCircle size={11} aria-hidden="true" /> Reject
-                          </button>
-                        </>
+                        <button
+                          type="button"
+                          disabled={busyId === r.id}
+                          onClick={() => updateStatus(r, "rejected")}
+                          className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-2 py-1 text-[11px] text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          <XCircle size={11} aria-hidden="true" /> Reject
+                        </button>
                       )}
                       {(r.status === "delivered" || r.status === "rejected") && (
                         <span className="text-[10px] text-muted-foreground">No further action</span>

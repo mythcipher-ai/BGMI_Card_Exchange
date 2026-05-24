@@ -101,7 +101,7 @@ const AddCard = () => {
         {events.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-1">
             <p className="text-sm text-foreground">No active events right now.</p>
-            <p className="text-xs text-muted-foreground">Check back soon — admins activate events as they go live in BGMI.</p>
+            <p className="text-xs text-muted-foreground">Check back soon. Admins activate events as they go live in BGMI.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-5">

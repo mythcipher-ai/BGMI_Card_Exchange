@@ -239,6 +239,53 @@ export async function getMyListings(req: Request, res: Response, next: NextFunct
   }
 }
 
+// Listings owned by the user that are awaiting their trade-outcome decision.
+// Drives the forced confirmation popup shown anywhere in the app — the user
+// can't dismiss it without picking Received / Not received.
+export async function getPendingConfirmations(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: "Authentication required" });
+
+    const listings = await CardListing.find({
+      createdBy: user.id,
+      status: "claimed",
+      tradeOutcome: "pending"
+    })
+      .sort({ claimedAt: -1 })
+      .populate<{ claimedBy: any }>("claimedBy", "name email")
+      .lean();
+
+    const allDefinedCards = await DefinedCard.find().lean();
+    const cardMap = new Map(allDefinedCards.map((c) => [c.name, c]));
+
+    const data = listings.map((l: any) => {
+      const claimer = l.claimedBy;
+      return {
+        id: l._id,
+        wantedCard: l.wantedCard,
+        wantedCardImage: cardMap.get(l.wantedCard)?.imageUrl ?? "",
+        wantedCardType: cardMap.get(l.wantedCard)?.type ?? "",
+        offeringCards: l.offeringCards || [],
+        offeringCardImages: (l.offeringCards || []).map((name: string) => ({
+          name,
+          imageUrl: cardMap.get(name)?.imageUrl ?? "",
+          type: cardMap.get(name)?.type ?? ""
+        })),
+        claimedAt: l.claimedAt ?? null,
+        claimedBy: claimer ? {
+          name: claimer.name || claimer.email?.split("@")[0] || "User",
+          email: claimer.email
+        } : null
+      };
+    });
+
+    res.json({ data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 // Owner confirms they received the wanted card in-game from the claimer.
 // This is THE point where successfulTrades increments for milestone rewards.
 export async function confirmTradeReceived(req: Request, res: Response, next: NextFunction) {
@@ -266,15 +313,27 @@ export async function confirmTradeReceived(req: Request, res: Response, next: Ne
     await User.findByIdAndUpdate(user.id, { $inc: { successfulTrades: 1 } });
 
     if (listing.claimedBy) {
-      User.findById(listing.claimedBy).select("email name").lean().then((claimer: any) => {
-        if (claimer?.email) {
-          sendTradeConfirmedToClaimer({
+      void (async () => {
+        try {
+          console.log("[trade] notifying claimer of confirmation", {
+            listingId: listing.id,
+            claimerId: String(listing.claimedBy)
+          });
+          const claimer = await User.findById(listing.claimedBy).select("email name").lean<{ email?: string; name?: string }>();
+          if (!claimer?.email) {
+            console.warn("[trade] claimer has no email, skipping confirmed email");
+            return;
+          }
+          const result = await sendTradeConfirmedToClaimer({
             to: claimer.email,
             toName: claimer.name,
             offeringCard: (listing.offeringCards || []).join(", ") || listing.wantedCard
-          }).catch(() => { /* silent */ });
+          });
+          if (!result.ok) console.warn("[trade] confirmed email did not send", { to: claimer.email, error: result.error });
+        } catch (err: any) {
+          console.error("[trade] failed to send confirmed email", err?.message || err);
         }
-      }).catch(() => { /* silent */ });
+      })();
     }
 
     res.json({
@@ -328,14 +387,25 @@ export async function disputeTrade(req: Request, res: Response, next: NextFuncti
         { new: true, select: "email name flagCount" }
       ).lean<{ email?: string; name?: string; flagCount?: number }>();
       newFlagCount = claimer?.flagCount ?? 0;
+      console.log("[trade] notifying claimer of dispute", {
+        listingId: listing.id,
+        claimerId: String(listing.claimedBy),
+        newFlagCount
+      });
       if (claimer?.email) {
-        sendTradeDisputedToClaimer({
+        void sendTradeDisputedToClaimer({
           to: claimer.email,
           toName: claimer.name,
           offeringCard: (listing.offeringCards || []).join(", ") || listing.wantedCard,
           reason,
           flagCount: newFlagCount
-        }).catch(() => { /* silent */ });
+        }).then((result) => {
+          if (!result.ok) console.warn("[trade] dispute email did not send", { to: claimer.email, error: result.error });
+        }).catch((err: any) => {
+          console.error("[trade] failed to send dispute email", err?.message || err);
+        });
+      } else {
+        console.warn("[trade] claimer has no email, skipping dispute email");
       }
     }
 
@@ -344,6 +414,48 @@ export async function disputeTrade(req: Request, res: Response, next: NextFuncti
       tradeOutcome: listing.tradeOutcome,
       outcomeAt: listing.outcomeAt,
       claimerFlagCount: newFlagCount
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Owner tells us the listing was traded outside this platform. Closes the
+// active row (frees their one-active-listing slot) and is deliberately NOT
+// recorded as a confirmed trade outcome, so it does NOT count toward
+// milestone rewards. The DefinedCard counters still get decremented like a
+// normal delete since the card is no longer up for grabs here.
+export async function markListingExternal(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: "Authentication required" });
+
+    const listingId = req.params.id;
+    const listing = await CardListing.findOne({ _id: listingId, createdBy: user.id });
+    if (!listing) {
+      return res.status(404).json({ message: "Listing not found or you are not authorized" });
+    }
+    if (listing.status !== "active") {
+      return res.status(409).json({ message: "Only active listings can be marked as traded off-platform" });
+    }
+
+    listing.status = "external";
+    listing.closedExternallyAt = new Date();
+    await listing.save();
+
+    if (listing.offeringCardIds && listing.offeringCardIds.length > 0) {
+      await DefinedCard.updateMany({ _id: { $in: listing.offeringCardIds } }, { $inc: { totalCount: -1 } });
+    }
+
+    const stillActive = await CardListing.exists({ createdBy: user.id, status: "active" });
+    if (!stillActive) {
+      await User.findByIdAndUpdate(user.id, { $set: { hasActiveListing: false } });
+    }
+
+    res.json({
+      id: listing.id,
+      status: listing.status,
+      closedExternallyAt: listing.closedExternallyAt
     });
   } catch (error) {
     next(error);

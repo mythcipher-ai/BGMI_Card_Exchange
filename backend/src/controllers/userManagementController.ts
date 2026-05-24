@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import { User } from "../models/User";
 import { Claim } from "../models/Claim";
 import { CardListing } from "../models/CardListing";
+import { DefinedCard } from "../models/DefinedCard";
+import { computeEffectiveTrades } from "../utils/milestones";
 
 export async function getAllUsers(_req: Request, res: Response, next: NextFunction) {
   try {
@@ -77,15 +79,100 @@ export async function getUserDetail(req: Request, res: Response, next: NextFunct
 
     const listings = await CardListing.find({ createdBy: id })
       .sort({ createdAt: -1 })
+      .populate<{ claimedBy: any }>("claimedBy", "name email")
       .lean();
 
     const claims = await Claim.find({ claimedBy: id })
-      .populate("listingId", "offeringCards wantedCard")
+      .populate<{ listingId: any }>({
+        path: "listingId",
+        populate: { path: "createdBy", select: "name email" }
+      })
       .sort({ createdAt: -1 })
       .lean();
 
+    // Pull image metadata for every card referenced by either side so the
+    // detail page can show real thumbnails instead of just names.
+    const cardNames = new Set<string>();
+    for (const l of listings as any[]) {
+      for (const n of l.offeringCards || []) cardNames.add(n);
+      if (l.wantedCard) cardNames.add(l.wantedCard);
+    }
+    for (const c of claims as any[]) {
+      for (const n of (c.listingId?.offeringCards as string[] | undefined) || []) cardNames.add(n);
+      if (c.listingId?.wantedCard) cardNames.add(c.listingId.wantedCard);
+    }
+    const defs = await DefinedCard.find({ name: { $in: [...cardNames] } }).lean();
+    const cardMap = new Map(defs.map((d) => [d.name, d]));
+
+    const enrichListing = (l: any) => ({
+      _id: l._id,
+      status: l.status,
+      offeringCards: l.offeringCards || [],
+      offeringCardImages: (l.offeringCards || []).map((name: string) => ({
+        name,
+        imageUrl: cardMap.get(name)?.imageUrl ?? "",
+        type: cardMap.get(name)?.type ?? ""
+      })),
+      wantedCard: l.wantedCard,
+      wantedCardImage: cardMap.get(l.wantedCard)?.imageUrl ?? "",
+      wantedCardType: cardMap.get(l.wantedCard)?.type ?? "",
+      tradeOutcome: l.tradeOutcome ?? null,
+      outcomeAt: l.outcomeAt ?? null,
+      disputeReason: l.disputeReason ?? null,
+      claimCount: l.claimCount ?? 0,
+      claimedBy: l.claimedBy ? {
+        name: l.claimedBy.name || l.claimedBy.email?.split("@")[0] || "User",
+        email: l.claimedBy.email
+      } : null,
+      claimedAt: l.claimedAt ?? null,
+      createdAt: l.createdAt,
+      expiresAt: l.expiresAt,
+      closedExternallyAt: l.closedExternallyAt ?? null
+    });
+
+    const enrichClaim = (c: any) => {
+      const l = c.listingId;
+      return {
+        _id: c._id,
+        revealedCode: c.revealedCode,
+        ipAddress: c.ipAddress,
+        createdAt: c.createdAt,
+        listing: l ? {
+          _id: l._id,
+          offeringCards: l.offeringCards || [],
+          offeringCardImages: (l.offeringCards || []).map((name: string) => ({
+            name,
+            imageUrl: cardMap.get(name)?.imageUrl ?? "",
+            type: cardMap.get(name)?.type ?? ""
+          })),
+          wantedCard: l.wantedCard,
+          wantedCardImage: cardMap.get(l.wantedCard)?.imageUrl ?? "",
+          tradeOutcome: l.tradeOutcome ?? null,
+          outcomeAt: l.outcomeAt ?? null,
+          owner: l.createdBy ? {
+            name: l.createdBy.name || l.createdBy.email?.split("@")[0] || "User",
+            email: l.createdBy.email
+          } : null
+        } : null
+      };
+    };
+
+    const enrichedListings = (listings as any[]).map(enrichListing);
+    const enrichedClaims = (claims as any[]).map(enrichClaim);
+
+    // Per-outcome breakdown drives the "feedback received" summary in the UI.
+    const feedback = {
+      pending: enrichedListings.filter((l) => l.status === "claimed" && l.tradeOutcome === "pending").length,
+      confirmed: enrichedListings.filter((l) => l.tradeOutcome === "confirmed").length,
+      disputed: enrichedListings.filter((l) => l.tradeOutcome === "disputed").length,
+      external: enrichedListings.filter((l) => l.status === "external").length
+    };
+
+    const { effective: effectiveTrades, listedConfirmed, claimedConfirmed } =
+      await computeEffectiveTrades(String(user._id));
+
     // Get unique IPs this user has used
-    const userIps = [...new Set(claims.map((c) => c.ipAddress))];
+    const userIps = [...new Set((claims as any[]).map((c) => c.ipAddress))].filter(Boolean);
 
     // Find other users sharing same IPs
     const otherClaims = await Claim.find({
@@ -108,8 +195,12 @@ export async function getUserDetail(req: Request, res: Response, next: NextFunct
 
     res.json({
       user,
-      listings,
-      claims,
+      listings: enrichedListings,
+      claims: enrichedClaims,
+      feedback,
+      effectiveTrades,
+      listedConfirmed,
+      claimedConfirmed,
       ips: userIps,
       sharedIpUsers: sharedIpUsers.map((u) => ({
         ...u,

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { X, AlertTriangle, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { X, AlertTriangle, Loader2, Copy, Check } from "lucide-react";
 import type { CardData } from "./CardItem";
 import { toast } from "sonner";
 import { claimListing } from "@/lib/api";
@@ -10,10 +10,48 @@ interface ClaimModalProps {
   onClaimed?: () => void;
 }
 
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to legacy path
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "absolute";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 const ClaimModal = ({ card, onClose, onClaimed }: ClaimModalProps) => {
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [revealedCode, setRevealedCode] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  // Auto-copy when the code is first revealed so the user can paste straight
+  // into BGMI. We still show a manual copy button as a fallback / re-copy.
+  useEffect(() => {
+    if (!confirmed || !revealedCode) return;
+    copyToClipboard(revealedCode).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        toast.success("Code copied to clipboard");
+      }
+    });
+  }, [confirmed, revealedCode]);
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -21,12 +59,22 @@ const ClaimModal = ({ card, onClose, onClaimed }: ClaimModalProps) => {
       const result = await claimListing(card.id);
       setRevealedCode(result.revealedCode);
       setConfirmed(true);
-      toast.success("Code revealed! Copy it before closing.");
       onClaimed?.();
     } catch (err: any) {
       toast.error(err.message || "Failed to claim");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(revealedCode);
+    if (ok) {
+      setCopied(true);
+      toast.success("Code copied");
+      setTimeout(() => setCopied(false), 1500);
+    } else {
+      toast.error("Couldn't copy. Long-press the code to copy it instead.");
     }
   };
 
@@ -54,15 +102,32 @@ const ClaimModal = ({ card, onClose, onClaimed }: ClaimModalProps) => {
           </button>
         </div>
 
-        <div className="space-y-2">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">You'll send</p>
-          <p className="text-sm text-foreground font-semibold">{card.wantedCard}</p>
-          <p className="text-xs text-muted-foreground">{card.wantedCardType}</p>
-        </div>
-
-        {card.wantedCardImage && (
-          <div className="rounded-md overflow-hidden aspect-[4/3]">
+        {card.wantedCardImage ? (
+          <div className="relative rounded-md overflow-hidden aspect-[3/3] border border-border">
             <img src={card.wantedCardImage} alt={card.wantedCard} className="w-full h-full object-cover" />
+
+            <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2 bg-gradient-to-b from-background/80 to-transparent">
+              <p className="text-sm font-semibold text-foreground drop-shadow truncate">{card.wantedCard}</p>
+              {card.wantedCardType && (
+                <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-background/80 backdrop-blur-sm text-primary border border-primary/40 rounded shrink-0">
+                  {card.wantedCardType}
+                </span>
+              )}
+            </div>
+
+            {!confirmed && (
+              <div className="absolute inset-x-0 bottom-0 flex items-start gap-2 px-3 py-2 bg-gradient-to-t from-destructive/80 via-destructive/50 to-transparent">
+                <AlertTriangle size={14} className="text-white mt-0.5 shrink-0" aria-hidden="true" />
+                <p className="text-[11px] font-medium text-white leading-tight">
+                  This action is irreversible. Once claimed, the code is revealed and the listing is removed.
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <p className="text-sm text-foreground font-semibold">{card.wantedCard}</p>
+            <p className="text-xs text-muted-foreground">{card.wantedCardType}</p>
           </div>
         )}
 
@@ -77,17 +142,23 @@ const ClaimModal = ({ card, onClose, onClaimed }: ClaimModalProps) => {
           </div>
         </div>
 
-        <div className="rounded-md bg-secondary p-3">
-          <p className="text-xs text-muted-foreground mb-1">Code</p>
-          <p className="font-mono text-sm text-foreground tracking-wider select-all">
-            {confirmed ? revealedCode : card.maskedCode}
-          </p>
-        </div>
-
-        {!confirmed && (
-          <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/20 p-3">
-            <AlertTriangle size={14} className="text-destructive mt-0.5 shrink-0" />
-            <p className="text-xs text-destructive">This action is irreversible. Once claimed, the code will be revealed and the listing removed.</p>
+        {confirmed && (
+          <div className="rounded-md bg-secondary p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">Code</p>
+              <button
+                type="button"
+                onClick={handleCopy}
+                aria-label="Copy code"
+                className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+              >
+                {copied ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <p className="font-mono text-sm text-foreground tracking-wider select-all mt-1">
+              {revealedCode}
+            </p>
           </div>
         )}
 

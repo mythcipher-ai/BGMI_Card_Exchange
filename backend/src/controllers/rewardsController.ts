@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { RewardRequest, RewardStatus } from "../models/RewardRequest";
 import { User } from "../models/User";
-import { MILESTONES, findMilestone } from "../utils/milestones";
+import { MILESTONES, findMilestone, computeEffectiveTrades } from "../utils/milestones";
 import {
   sendRewardClaimToAdmin,
   sendRewardDeliveredToUser,
@@ -26,7 +26,9 @@ export async function getMyMilestones(req: Request, res: Response, next: NextFun
     const requestByMilestone = new Map<number, any>();
     for (const r of myRequests) requestByMilestone.set(r.milestone, r);
 
-    const trades = user.successfulTrades ?? 0;
+    // Effective trades = min(confirmed-listings, confirmed-claims). The user
+    // must complete BOTH legs of the marketplace for the milestone to count.
+    const { effective: trades } = await computeEffectiveTrades(user.id);
 
     const milestones = MILESTONES.map((m) => {
       const request = requestByMilestone.get(m.threshold);
@@ -106,7 +108,8 @@ export async function claimMilestone(req: Request, res: Response, next: NextFunc
     const liveUser = await User.findById(user.id);
     if (!liveUser) return res.status(401).json({ message: "User not found" });
 
-    if ((liveUser.successfulTrades ?? 0) < def.threshold) {
+    const { effective: liveTrades } = await computeEffectiveTrades(liveUser.id);
+    if (liveTrades < def.threshold) {
       return res.status(403).json({
         code: "MILESTONE_LOCKED",
         message: `You need ${def.threshold} successful trade(s) to claim this reward.`
@@ -128,7 +131,7 @@ export async function claimMilestone(req: Request, res: Response, next: NextFunc
         milestone: def.threshold,
         popularityAmount: def.popularityReward,
         bgmiUid: cleanUid,
-        successfulTradesAtClaim: liveUser.successfulTrades ?? 0
+        successfulTradesAtClaim: liveTrades
       });
     } catch (err: any) {
       // Race: another request inserted between the check and the write.
@@ -163,9 +166,9 @@ export async function claimMilestone(req: Request, res: Response, next: NextFunc
       milestone: request.milestone,
       popularityAmount: request.popularityAmount,
       bgmiUid: cleanUid,
-      successfulTrades: liveUser.successfulTrades ?? 0,
+      successfulTrades: liveTrades,
       submittedAt: request.createdAt
-    }).catch(() => { /* swallow — admin can also see this in the panel */ });
+    }).catch(() => { /* swallow, admin can also see this in the panel */ });
   } catch (error) {
     next(error);
   }
@@ -212,9 +215,12 @@ export async function adminListRewardRequests(req: Request, res: Response, next:
   }
 }
 
+// "delivered" is no longer reachable per product decision — admin only marks
+// pending requests as approved or rejected. The enum stays in the model so
+// historical rows render correctly.
 const VALID_TRANSITIONS: Record<RewardStatus, RewardStatus[]> = {
-  pending: ["approved", "delivered", "rejected"],
-  approved: ["delivered", "rejected"],
+  pending: ["approved", "rejected"],
+  approved: ["rejected"],
   delivered: [],
   rejected: []
 };
@@ -225,8 +231,8 @@ export async function adminSetRewardStatus(req: Request, res: Response, next: Ne
     const { id } = req.params;
     const { status, rejectionReason } = req.body ?? {};
 
-    if (!["approved", "delivered", "rejected"].includes(status)) {
-      return res.status(400).json({ message: "Status must be approved | delivered | rejected" });
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Status must be approved | rejected" });
     }
 
     const request = await RewardRequest.findById(id).populate<{ userId: any }>("userId", "email name");
@@ -243,12 +249,6 @@ export async function adminSetRewardStatus(req: Request, res: Response, next: Ne
     if (status === "approved") {
       request.approvedBy = admin._id as any;
       request.approvedAt = now;
-    } else if (status === "delivered") {
-      if (!request.approvedAt) {
-        request.approvedBy = admin._id as any;
-        request.approvedAt = now;
-      }
-      request.deliveredAt = now;
     } else if (status === "rejected") {
       request.rejectedAt = now;
       if (typeof rejectionReason === "string") {
@@ -259,10 +259,11 @@ export async function adminSetRewardStatus(req: Request, res: Response, next: Ne
 
     res.json({ data: { id: request._id, status: request.status } });
 
-    // Email the user out-of-band if it's a final state.
+    // Approval emails reuse the delivered template since the reward is
+    // effectively granted at the approve step now.
     const targetUser = request.userId as any;
     if (targetUser?.email) {
-      if (status === "delivered") {
+      if (status === "approved") {
         void sendRewardDeliveredToUser({
           to: targetUser.email,
           toName: targetUser.name,

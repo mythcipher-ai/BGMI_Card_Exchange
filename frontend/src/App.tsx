@@ -9,6 +9,7 @@ import Profile from "./pages/Profile";
 import AddCard from "./pages/AddCard";
 import Admin from "./pages/Admin";
 import UserManagement from "./pages/UserManagement";
+import AdminUserDetail from "./pages/AdminUserDetail";
 import Login from "./pages/Login";
 import Callback from "./pages/Callback";
 import NotFound from "./pages/NotFound";
@@ -18,6 +19,8 @@ import About from "./pages/About";
 import UserGuide from "./pages/UserGuide";
 import Rewards from "./pages/Rewards";
 import EventBrowse from "./pages/EventBrowse";
+import TradeConfirmationGate from "./components/TradeConfirmationGate";
+import ExternalTradePrompt from "./components/ExternalTradePrompt";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +35,10 @@ const App = () => (
     authorizationParams={{
       redirect_uri: `${window.location.origin}/callback`,
       audience,
+      // Explicit scopes so the ID token always carries name/email/picture and
+      // the backend can persist them. Without `email`, owner.email is empty
+      // and every trade/claim email silently fails to send.
+      scope: "openid profile email",
     }}
   >
     <QueryClientProvider client={queryClient}>
@@ -46,6 +53,7 @@ const App = () => (
               <Route path="/event/:id" element={<EventBrowse />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/users" element={<UserManagement />} />
+              <Route path="/admin/users/:id" element={<AdminUserDetail />} />
               <Route path="/login" element={<Login />} />
               <Route path="/callback" element={<Callback />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
@@ -55,6 +63,8 @@ const App = () => (
               <Route path="/rewards" element={<Rewards />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <TradeConfirmationGate />
+            <ExternalTradePrompt />
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

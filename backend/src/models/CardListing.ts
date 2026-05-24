@@ -1,6 +1,6 @@
 import { Document, model, Schema, Types } from "mongoose";
 
-export type ListingStatus = "active" | "claimed" | "expired";
+export type ListingStatus = "active" | "claimed" | "expired" | "external";
 // After a successful claim a listing enters "pending" outcome. The owner then
 // resolves it to "confirmed" (they received their wanted card in-game and the
 // trade counts) or "disputed" (claimer didn't deliver — claimer gets flagged).
@@ -30,6 +30,9 @@ export interface ICardListing extends Document {
   claimedAt?: Date;
   outcomeAt?: Date;
   disputeReason?: string;
+  // When the lister tells us they traded the card off-platform. Closes the
+  // listing without counting toward milestone rewards.
+  closedExternallyAt?: Date;
   createdAt: Date;
   expiresAt: Date;
 }
@@ -46,7 +49,7 @@ const cardListingSchema = new Schema<ICardListing>({
   wantedCardId: { type: Schema.Types.ObjectId, ref: "DefinedCard" },
   code: { type: String, required: true },
   codeHash: { type: String, index: true },
-  status: { type: String, enum: ["active", "claimed", "expired"], default: "active" },
+  status: { type: String, enum: ["active", "claimed", "expired", "external"], default: "active" },
   claimCount: { type: Number, default: 0 },
   reports: { type: Number, default: 0 },
   hidden: { type: Boolean, default: false },
@@ -56,6 +59,7 @@ const cardListingSchema = new Schema<ICardListing>({
   claimedAt: { type: Date },
   outcomeAt: { type: Date },
   disputeReason: { type: String, maxlength: 400 },
+  closedExternallyAt: { type: Date },
   createdAt: { type: Date, default: () => new Date() },
   expiresAt: { type: Date, required: true }
 });

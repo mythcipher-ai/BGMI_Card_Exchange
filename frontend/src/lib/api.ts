@@ -171,8 +171,52 @@ export function disputeTrade(id: string, reason?: string) {
   );
 }
 
+// Owner says they traded the card outside this platform. Closes the listing
+// without counting toward milestone rewards.
+export function markListingExternal(id: string) {
+  return request<{ id: string; status: string; closedExternallyAt: string }>(
+    `/api/listings/${id}/mark-external`,
+    { method: "POST" }
+  );
+}
+
 export function claimListing(listingId: string) {
   return request<{ listingId: string; status: string; revealedCode: string; message: string }>(`/api/claims/${listingId}`, { method: "POST" });
+}
+
+export interface MyClaim {
+  id: string;
+  listingId: string;
+  revealedCode: string;
+  claimedAt: string;
+  tradeOutcome: TradeOutcome;
+  outcomeAt: string | null;
+  disputeReason: string | null;
+  wantedCard: string;
+  wantedCardImage: string;
+  wantedCardType: string;
+  offeringCards: string[];
+  offeringCardImages: CardImage[];
+  owner: { name: string; email?: string } | null;
+}
+
+export function fetchMyClaims() {
+  return request<{ data: MyClaim[] }>("/api/me/claimed");
+}
+
+export interface PendingConfirmation {
+  id: string;
+  wantedCard: string;
+  wantedCardImage: string;
+  wantedCardType: string;
+  offeringCards: string[];
+  offeringCardImages: CardImage[];
+  claimedAt: string | null;
+  claimedBy: { name: string; email?: string } | null;
+}
+
+export function fetchPendingConfirmations() {
+  return request<{ data: PendingConfirmation[] }>("/api/me/pending-confirmations");
 }
 
 export function reportListing(listingId: string, reason?: string) {
@@ -202,7 +246,7 @@ export function fetchMe() {
   return request<MeProfile>("/api/me");
 }
 
-export function syncProfile(body: { name?: string; picture?: string }) {
+export function syncProfile(body: { name?: string; email?: string; picture?: string }) {
   return request<{ ok: boolean }>("/api/me/sync", { method: "POST", body: JSON.stringify(body) });
 }
 
@@ -285,8 +329,76 @@ export function adminGetUsers() {
   return request<{ data: AdminUser[] }>("/api/admin/users");
 }
 
+export interface AdminListingDetail {
+  _id: string;
+  status: string;
+  offeringCards: string[];
+  offeringCardImages: CardImage[];
+  wantedCard: string;
+  wantedCardImage: string;
+  wantedCardType: string;
+  tradeOutcome: TradeOutcome | null;
+  outcomeAt: string | null;
+  disputeReason: string | null;
+  claimCount: number;
+  claimedBy: { name: string; email?: string } | null;
+  claimedAt: string | null;
+  createdAt: string;
+  expiresAt: string;
+  closedExternallyAt: string | null;
+}
+
+export interface AdminClaimDetail {
+  _id: string;
+  revealedCode: string;
+  ipAddress: string;
+  createdAt: string;
+  listing: {
+    _id: string;
+    offeringCards: string[];
+    offeringCardImages: CardImage[];
+    wantedCard: string;
+    wantedCardImage: string;
+    tradeOutcome: TradeOutcome | null;
+    outcomeAt: string | null;
+    owner: { name: string; email?: string } | null;
+  } | null;
+}
+
+export interface AdminUserDetailPayload {
+  user: {
+    _id: string;
+    auth0Id: string;
+    email?: string;
+    name?: string;
+    picture?: string;
+    role: string;
+    status: string;
+    trustScore?: number;
+    flagCount?: number;
+    successfulTrades?: number;
+    createdAt?: string;
+  };
+  listings: AdminListingDetail[];
+  claims: AdminClaimDetail[];
+  feedback: { pending: number; confirmed: number; disputed: number; external: number };
+  effectiveTrades: number;
+  listedConfirmed: number;
+  claimedConfirmed: number;
+  ips: string[];
+  sharedIpUsers: Array<{
+    _id: string;
+    name?: string;
+    email?: string;
+    picture?: string;
+    role: string;
+    status: string;
+    sharedIps: string[];
+  }>;
+}
+
 export function adminGetUserDetail(id: string) {
-  return request<any>(`/api/admin/users/${id}`);
+  return request<AdminUserDetailPayload>(`/api/admin/users/${id}`);
 }
 
 export function adminBlockUser(id: string) {
@@ -368,7 +480,7 @@ export function adminGetRewards(status?: RewardStatus) {
   return request<{ data: AdminRewardRequest[] }>(`/api/admin/rewards${q}`);
 }
 
-export function adminSetRewardStatus(id: string, status: "approved" | "delivered" | "rejected", rejectionReason?: string) {
+export function adminSetRewardStatus(id: string, status: "approved" | "rejected", rejectionReason?: string) {
   return request<{ data: { id: string; status: RewardStatus } }>(
     `/api/admin/rewards/${id}/status`,
     { method: "PATCH", body: JSON.stringify({ status, rejectionReason }) }
@@ -402,7 +514,6 @@ export function fetchMyEligibility() {
 // ---- Gift requests (authenticated) ----
 export interface GiftRequestPayload {
   requesterName: string;
-  requesterEmail: string;
   message: string;
   popularityOffered: number;
 }
@@ -415,7 +526,7 @@ export interface GiftRequestRecord {
   fromUserName: string;
   toUserName: string;
   requesterName: string;
-  requesterEmail: string;
+  requesterEmail?: string;
   message: string;
   popularityOffered: number;
   status: "pending" | "acknowledged" | "fulfilled" | "declined" | "expired";

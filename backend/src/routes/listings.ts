@@ -5,7 +5,8 @@ import {
   getListings,
   getMyListings,
   confirmTradeReceived,
-  disputeTrade
+  disputeTrade,
+  markListingExternal
 } from "../controllers/listingsController";
 import { validateObjectId } from "../middleware/validateObjectId";
 
@@ -16,4 +17,5 @@ listingsRouter.get("/mine", getMyListings);
 listingsRouter.post("/", createListing);
 listingsRouter.post("/:id/confirm-received", validateObjectId, confirmTradeReceived);
 listingsRouter.post("/:id/dispute", validateObjectId, disputeTrade);
+listingsRouter.post("/:id/mark-external", validateObjectId, markListingExternal);
 listingsRouter.delete("/:id", validateObjectId, deleteListing);

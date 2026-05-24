@@ -18,7 +18,6 @@ const GiftRequestModal = ({ card, onClose }: GiftRequestModalProps) => {
   const { isAuthenticated, user, login } = useAuth();
 
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [popularity, setPopularity] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -26,7 +25,6 @@ const GiftRequestModal = ({ card, onClose }: GiftRequestModalProps) => {
 
   useEffect(() => {
     if (user?.name) setName(user.name);
-    if (user?.email) setEmail(user.email);
   }, [user]);
 
   if (!isAuthenticated) {
@@ -69,7 +67,6 @@ const GiftRequestModal = ({ card, onClose }: GiftRequestModalProps) => {
   const messageTooShort = message.trim().length > 0 && message.trim().length < MIN_MESSAGE;
   const formValid =
     name.trim().length > 0 &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
     message.trim().length >= MIN_MESSAGE &&
     popularity >= 0 &&
     popularity <= POPULARITY_MAX;
@@ -81,7 +78,6 @@ const GiftRequestModal = ({ card, onClose }: GiftRequestModalProps) => {
     try {
       await createGiftRequest(card.id, {
         requesterName: name.trim(),
-        requesterEmail: email.trim(),
         message: message.trim(),
         popularityOffered: popularity
       });
@@ -139,7 +135,7 @@ const GiftRequestModal = ({ card, onClose }: GiftRequestModalProps) => {
             <div className="rounded-md bg-accent/10 border border-accent/30 p-3">
               <p className="text-sm text-foreground font-medium">Request sent.</p>
               <p className="text-xs text-muted-foreground mt-1">
-                The card owner has been emailed. If they're interested they'll reach you at <span className="text-foreground">{email}</span>.
+                The card owner has been emailed from our address. If they're interested they'll reply through the platform.
                 Any BGMI in-game popularity you offered would be transferred directly to them in-game; we don't handle it.
               </p>
             </div>
@@ -160,31 +156,20 @@ const GiftRequestModal = ({ card, onClose }: GiftRequestModalProps) => {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="gift-name">Your name</label>
-                <input
-                  id="gift-name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={60}
-                  required
-                  className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="gift-email">Your email</label>
-                <input
-                  id="gift-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  maxLength={120}
-                  required
-                  className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="gift-name">Your name</label>
+              <input
+                id="gift-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={60}
+                required
+                className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                The owner will be emailed from our address. They'll reply through the platform; you don't need to share your email.
+              </p>
             </div>
 
             <div className="space-y-1">
